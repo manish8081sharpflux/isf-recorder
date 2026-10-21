@@ -55,5 +55,5 @@ captures/
 .pytest_cache/
 *.apk
 
-# The released app the server hands out (C:\GroundUp\isf-recorderpp-release.apk): kept in the repo on purpose
+# The released app the server hands out (C:/GroundUp/isf-recorder/app-release.apk): kept in the repo on purpose
 !/app-release.apk
