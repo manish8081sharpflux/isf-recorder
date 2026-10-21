@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,7 +39,7 @@ fun TranscriptScreen(recordingId: String, onBack: () -> Unit) {
 
     var detail by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     var runs by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var viewingRun by remember { mutableStateOf<Map<String, Any?>?>(null) }   // a non-active version
     var busy by remember { mutableStateOf(false) }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,7 +60,7 @@ fun SessionChatScreen(
     // When the AI answers, close the keyboard so the whole answer can be read; tapping the box opens it again.
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    var inputText by remember { mutableStateOf(initialPrompt ?: "") }
+    var inputText by rememberSaveable { mutableStateOf(initialPrompt ?: "") }   // half-typed question is kept
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     // Templates
@@ -68,7 +69,7 @@ fun SessionChatScreen(
     var showTemplateSheet by remember { mutableStateOf(false) }
 
     // Saved conversation this screen is bound to (null until resolved / created)
-    var convId by remember { mutableStateOf(conversationId) }
+    var convId by rememberSaveable { mutableStateOf(conversationId) }   // a new chat reopens as the same conversation
     var convTitle by remember { mutableStateOf<String?>(null) }
     // Server without /chat/conversations → fall back to the v1.2.0 endpoints
     var useLegacy by remember { mutableStateOf(false) }

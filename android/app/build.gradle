@@ -13,8 +13,8 @@ android {
         applicationId "com.isf.recorder"
         minSdk 26
         targetSdk 34
-        versionCode 40
-        versionName "2.6.3"
+        versionCode 41
+        versionName "2.6.4"
 
         // Fixed server per build type (UserPreferences.serverUrl always returns this).
         buildConfigField "String", "SERVER_URL", '"https://gubandhu.initiativesewafoundation.com/recorder"'

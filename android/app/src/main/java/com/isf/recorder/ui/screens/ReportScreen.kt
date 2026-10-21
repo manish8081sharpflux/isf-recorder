@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,8 +55,9 @@ fun ReportScreen(
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
 
-    var editing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf("") }
+    // saved: an unfinished edit comes back after switching apps (also if Android closed Jomi meanwhile)
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var editText by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf<String?>(null) } // "save" | "finalize" | "regenerate" | "reopen" | "ai"
 
     var showRegenerate by remember { mutableStateOf(false) }

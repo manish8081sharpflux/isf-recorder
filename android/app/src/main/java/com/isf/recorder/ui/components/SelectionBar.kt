@@ -19,6 +19,12 @@ import com.isf.recorder.data.api.ISFApiClient
 import com.isf.recorder.ui.theme.*
 import kotlinx.coroutines.launch
 
+/** An open popup's recording (only id + title are kept) — restored after switching apps. */
+val OpenRecordingSaver = androidx.compose.runtime.saveable.listSaver<Map<String, Any?>?, String>(
+    save = { rec -> if (rec == null) emptyList() else listOf(rec["id"]?.toString().orEmpty(), rec["title"]?.toString().orEmpty()) },
+    restore = { v -> if (v.size == 2 && v[0].isNotBlank()) mapOf("id" to v[0], "title" to v[1]) else null }
+)
+
 /** Keeps the long-press selection (recording ids) when the person opens a report and comes Back. */
 val SelectedIdsSaver = androidx.compose.runtime.saveable.listSaver<Set<String>, String>(
     save = { it.toList() },

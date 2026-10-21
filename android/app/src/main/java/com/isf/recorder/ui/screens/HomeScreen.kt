@@ -125,8 +125,9 @@ fun HomeScreen(
         if (!granted) Toast.makeText(context, "Microphone permission is needed to record", Toast.LENGTH_LONG).show()
     }
 
-    var reportFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
-    var povFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    // the open report / Director's POV popup comes back after switching apps (only id + title are saved)
+    var reportFor by rememberSaveable(stateSaver = OpenRecordingSaver) { mutableStateOf<Map<String, Any?>?>(null) }
+    var povFor by rememberSaveable(stateSaver = OpenRecordingSaver) { mutableStateOf<Map<String, Any?>?>(null) }
     var expandedId by rememberSaveable { mutableStateOf<String?>(null) }   // the one open recording card (kept on Back)
     // Tapping a card jumps up to the player; closing a report / Director's POV opened from there scrolls back down
     // to that card (21 Oct). Only while the person is still up at the player (they did not scroll away themselves).

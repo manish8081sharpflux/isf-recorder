@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,8 +45,9 @@ fun ReportSheet(
     var report by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var editing by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf("") }
+    // saved: an unfinished edit comes back after switching apps (also if Android closed Jomi meanwhile)
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var text by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf<String?>(null) }
     var showAi by remember { mutableStateOf(false) }
     var proposal by remember { mutableStateOf<String?>(null) }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
@@ -51,6 +52,51 @@ sealed class Screen {
         val conversationId: String? = null,
         val newChat: Boolean = false
     ) : Screen()
+
+    /** Stable text form (21 Oct): the open screens are saved with it, so after Android closes Jomi in the
+     *  background, reopening rebuilds the same screens. Also the key of each screen's saved state. */
+    fun encode(): String = com.google.gson.Gson().toJson(
+        when (this) {
+            Login -> mapOf("s" to "login")
+            Home -> mapOf("s" to "home")
+            AllRecordings -> mapOf("s" to "all")
+            AskJomi -> mapOf("s" to "ask")
+            Settings -> mapOf("s" to "settings")
+            is Transcript -> mapOf("s" to "transcript", "id" to recordingId)
+            is Report -> mapOf("s" to "report", "id" to recordingId)
+            is Chat -> mapOf("s" to "chat", "mode" to mode, "id" to recordingId, "title" to recordingTitle,
+                "prompt" to initialPrompt, "conv" to conversationId, "new" to newChat)
+        }
+    )
+
+    companion object {
+        fun decode(text: String): Screen? = runCatching {
+            @Suppress("UNCHECKED_CAST")
+            val m = com.google.gson.Gson().fromJson(text, Map::class.java) as Map<String, Any?>
+            fun s(k: String) = m[k]?.toString()
+            when (s("s")) {
+                "login" -> Login
+                "home" -> Home
+                "all" -> AllRecordings
+                "ask" -> AskJomi
+                "settings" -> Settings
+                "transcript" -> Transcript(s("id")!!)
+                "report" -> Report(s("id")!!)
+                "chat" -> Chat(s("mode") ?: "all_sessions", s("id"), s("title"), s("prompt"), s("conv"), m["new"] == true)
+                else -> null
+            }
+        }.getOrNull()
+
+        /** Saves the back stack as text; a list that cannot be read back starts at [fallback]. */
+        fun stackSaver(fallback: () -> Screen) = androidx.compose.runtime.saveable.listSaver<
+            androidx.compose.runtime.snapshots.SnapshotStateList<Screen>, String>(
+            save = { list -> list.map { it.encode() } },
+            restore = { saved ->
+                val screens = saved.mapNotNull { decode(it) }.ifEmpty { listOf(fallback()) }
+                mutableStateListOf(*screens.toTypedArray())
+            }
+        )
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -90,8 +136,14 @@ class MainActivity : ComponentActivity() {
                         .systemBarsPadding(),
                     color = androidx.compose.material3.MaterialTheme.colorScheme.background
                 ) {
-                    val backStack = remember {
-                        mutableStateListOf<Screen>(if (prefs.isLoggedIn) Screen.Home else Screen.Login)
+                    // rememberSaveable: if Android closes Jomi in the background, reopening shows the same screens
+                    val startScreen = { if (prefs.isLoggedIn) Screen.Home else Screen.Login }
+                    val backStack = rememberSaveable(saver = Screen.stackSaver(startScreen)) {
+                        mutableStateListOf(startScreen())
+                    }
+                    // a session that ended while the app was closed must not reopen inside the app
+                    LaunchedEffect(Unit) {
+                        if (!prefs.isLoggedIn && backStack.lastOrNull() != Screen.Login) { backStack.clear(); backStack.add(Screen.Login) }
                     }
                     // Bumped when a super admin switches "View as Coach" so every screen re-reads the role.
                     var roleEpoch by remember { mutableIntStateOf(0) }
@@ -112,12 +164,12 @@ class MainActivity : ComponentActivity() {
                     fun navigateBack() {
                         if (backStack.size > 1) {
                             val closed = backStack.removeAt(backStack.size - 1)
-                            if (closed !in backStack) screenStates.removeState(closed.toString())
+                            if (closed !in backStack) screenStates.removeState(closed.encode())
                         }
                     }
 
                     fun resetTo(screen: Screen) {
-                        backStack.forEach { screenStates.removeState(it.toString()) }
+                        backStack.forEach { screenStates.removeState(it.encode()) }
                         backStack.clear()
                         backStack.add(screen)
                     }
@@ -213,7 +265,7 @@ class MainActivity : ComponentActivity() {
                             },
                             label = "ScreenTransition"
                         ) { target ->
-                          screenStates.SaveableStateProvider(target.toString()) {
+                          screenStates.SaveableStateProvider(target.encode()) {
                             when (target) {
                                 is Screen.Login -> LoginScreen(onLoginSuccess = { askName = prefs.needsName; resetTo(Screen.Home) })
 
