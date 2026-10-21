@@ -146,7 +146,8 @@ def _clean_output(raw: str) -> str:
     return out.replace("\\r\\n", "\n").replace("\\n", "\n")
 
 
-def _call_model(org_id: str, recording_id: Optional[str], prompt: str, temperature: float = 0.2) -> str:
+def _call_model(org_id: str, recording_id: Optional[str], prompt: str, temperature: float = 0.2,
+                operation_type: str = "REPORT") -> str:
     from google.genai import types
     from backend.settings.model_resolver import get_intelligence_model
     from backend.transcription.usage_tracker import track_gemini_call
@@ -158,7 +159,7 @@ def _call_model(org_id: str, recording_id: Optional[str], prompt: str, temperatu
         max_output_tokens=REPORT_MAX_OUTPUT_TOKENS,
     )
     response = track_gemini_call(
-        recording_id=recording_id, operation_type="REPORT", gemini_model=model, org_id=org_id,
+        recording_id=recording_id, operation_type=operation_type, gemini_model=model, org_id=org_id,
         call_fn=lambda: client.models.generate_content(model=model, contents=[prompt], config=config),
     )
     return _clean_output(response.text or "")
@@ -211,6 +212,10 @@ def generate_report(recording_id: str, run_id: Optional[str] = None, template_id
         content = _call_model(org_id, recording_id, build_report_prompt(prompt_text, _metadata_block(rec), transcript))
         if not content.strip():
             raise RuntimeError("The AI returned an empty report. Tap Regenerate.")
+        if rec.source != "call":
+            # Name memory (21 Oct): spellings people corrected before are fixed in the report too (no prompt change)
+            from backend.names.memory import apply_fixes, fixes
+            content = apply_fixes(content, fixes(db, org_id, rec.balgruh_name))
         saved = db.execute(text("""
             UPDATE isf_recorder.recording_report
             SET content = :content, status = 'draft', error_message = NULL, generated_at = NOW(), updated_at = NOW(),
@@ -222,6 +227,10 @@ def generate_report(recording_id: str, run_id: Optional[str] = None, template_id
         if saved and rec.source == "call":
             save_call_tasks(db, recording_id, str(rec.user_id), parse_call_tasks(content))
         db.commit()
+        if saved and rec.source != "call":
+            # count the names in this report for its Balgruha (background; never blocks or fails the report)
+            from backend.names.memory import start_learning_from_report
+            start_learning_from_report(org_id, recording_id, rec.balgruh_name, content)
         logger.info(f"Report draft generated for {recording_id} ({len(content)} chars)" if saved else
                     f"Report of {recording_id} changed while generating; result discarded")
         return bool(saved)

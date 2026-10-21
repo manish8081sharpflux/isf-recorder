@@ -228,6 +228,11 @@ def parse_compact(text_out: str, offset: float, window_end: float) -> List[Dict[
     return raw
 
 
+# Names expected in this recording (name memory, 21 Oct): set once per recording in transcribe_chunked and
+# copied into every window task with the context, so each window's prompt carries them.
+NAME_HINT: contextvars.ContextVar[str] = contextvars.ContextVar("stt_name_hint", default="")
+
+
 def _call_once(client, model_name: str, wav_bytes: bytes, recording_id: Optional[str], duration: float):
     from google.genai import types
     from backend.transcription.usage_tracker import track_gemini_call
@@ -240,7 +245,8 @@ def _call_once(client, model_name: str, wav_bytes: bytes, recording_id: Optional
     part = types.Part.from_bytes(data=wav_bytes, mime_type="audio/wav")
 
     def _do():
-        return client.models.generate_content(model=model_name, contents=[part, COMPACT_PROMPT], config=config)
+        return client.models.generate_content(model=model_name, contents=[part, COMPACT_PROMPT + NAME_HINT.get()],
+                                              config=config)
 
     with GLOBAL_CALL_SEMAPHORE:
         return track_gemini_call(recording_id=recording_id, operation_type="TRANSCRIPTION",
@@ -514,6 +520,16 @@ def transcribe_chunked(audio_path: str, recording_id: str, model: str, run_id: O
             else:
                 _save_window(run_id, recording_id, idx, start, end, fingerprint, status="pending")
                 todo.append((idx, start, end))
+
+        NAME_HINT.set("")
+        if recording_id and todo:
+            try:
+                from backend.database import SessionLocal
+                from backend.names.memory import names_for_recording, prompt_hint
+                with SessionLocal() as ndb:
+                    NAME_HINT.set(prompt_hint(names_for_recording(ndb, recording_id)))
+            except Exception as e:
+                logger.warning(f"Name hint skipped for {recording_id}: {e}")
 
         holder = {"client": client}
         client_lock = threading.Lock()

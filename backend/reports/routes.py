@@ -53,6 +53,19 @@ def _recording(db: Session, recording_id: str, user: dict):
     return rec
 
 
+def _learn_names(db: Session, rec, old: str, new: str) -> None:
+    """Name memory (21 Oct): a name changed in this edit ("Pavnesh" → "Bhavnesh") is remembered silently."""
+    try:
+        meta = db.execute(text("SELECT balgruh_name, source FROM isf_recorder.recording WHERE id = :id"),
+                          {"id": str(rec.id)}).fetchone()
+        if meta and meta.source != "call":
+            from backend.names.memory import learn_from_edit
+            learn_from_edit(db, str(rec.org_id), meta.balgruh_name, old or "", new or "")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Name learning from edit skipped for {rec.id}: {e}")
+
+
 def _report(db: Session, recording_id: str):
     return db.execute(text("""
         SELECT rr.*, u.name AS updated_by_name
@@ -97,6 +110,7 @@ def save_report(recording_id: str, body: ReportUpdate, user: dict = Depends(get_
     call_access(db, recording_id, user, write=True)   # calls are private to their owner
     rec = _recording(db, recording_id, user)
     row = _report(db, str(rec.id))
+    old_content = row.content if row else ""
     if row and row.status == "generating":
         raise HTTPException(status_code=409, detail="The report is being generated. Try again in a moment.")
     if row and row.status == "final" and user.get("role") != "admin":
@@ -115,6 +129,7 @@ def save_report(recording_id: str, body: ReportUpdate, user: dict = Depends(get_
         """), {"id": str(rec.id), "c": body.content, "u": user["user_id"]})
     db.commit()
     notify_safely(on_report_changed_by_admin, db, str(rec.id), user, "edited")
+    _learn_names(db, rec, old_content, body.content)
     return _report_json(_report(db, str(rec.id)), user)
 
 

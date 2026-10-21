@@ -1393,6 +1393,17 @@ class ISFApiClient(context: Context) {
         sendForMap("POST", apiUrl("/recordings/$recordingId/report/translate"), mapOf("lang" to lang), longTimeout = true)
             .mapCatching { it["content"]?.toString() ?: throw IllegalStateException("No translation returned") }
 
+    // ── Name memory (21 Oct, admins) ───────────────────────────────────────────
+
+    /** GET /names → names Jomi learned (heard / corrected), with the spellings they fix. */
+    suspend fun getLearnedNames(): Result<List<Map<String, Any?>>> =
+        sendForMap("GET", apiUrl("/names")).mapCatching {
+            @Suppress("UNCHECKED_CAST")
+            (it["items"] as? List<Map<String, Any?>>).orEmpty()
+        }
+
+    suspend fun forgetLearnedName(id: Long): Result<Map<String, Any?>> = sendForMap("DELETE", apiUrl("/names/$id"))
+
     // ── Director's POV (21 Oct, admins only) ────────────────────────────────────
 
     /** GET /recordings/{id}/director-pov → {status: none|generating|ready|error, content, generated_by_name, generated_at} */

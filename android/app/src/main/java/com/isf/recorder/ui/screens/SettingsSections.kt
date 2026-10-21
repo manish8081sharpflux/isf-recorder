@@ -422,10 +422,81 @@ fun ListsSection(api: ISFApiClient, roleLabel: String) {
                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JomiMint, selectedLabelColor = JomiTeal))
             FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("$roleLabel names") },
                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JomiMint, selectedLabelColor = JomiTeal))
+            FilterChip(selected = tab == 2, onClick = { tab = 2 }, label = { Text("Learned names") },
+                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JomiMint, selectedLabelColor = JomiTeal))
         }
         Spacer(Modifier.height(8.dp))
-        if (tab == 0) ListEditor(api, "balgruh", "Balgruha names")
-        else ListEditor(api, "coach_name", "Extra $roleLabel names", "People without the app who can be picked as Assistant ${roleLabel.lowercase()}")
+        when (tab) {
+            0 -> ListEditor(api, "balgruh", "Balgruha names")
+            1 -> ListEditor(api, "coach_name", "Extra $roleLabel names", "People without the app who can be picked as Assistant ${roleLabel.lowercase()}")
+            else -> LearnedNames(api)
+        }
+    }
+}
+
+/**
+ * Name memory (21 Oct): names Jomi learned by itself (heard in reports, or corrected in a report edit), which it
+ * sends to the AI so they are spelled right. Nothing to do here — only to remove a wrongly learned name.
+ */
+@Composable
+private fun LearnedNames(api: ISFApiClient) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var items by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var forget by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    suspend fun load() {
+        api.getLearnedNames().onSuccess { items = it; error = null }.onFailure { error = it.message }
+        loading = false
+    }
+    LaunchedEffect(Unit) { load() }
+
+    Text("Jomi learns names by itself: from reports, and when someone corrects a name in a report. " +
+        "It uses them so the AI spells names right. Remove one only if it was learned by mistake.",
+        color = JomiTextMuted, fontSize = 12.sp)
+    Spacer(Modifier.height(8.dp))
+    when {
+        loading -> CircularProgressIndicator(color = JomiGreen, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        error != null -> Text("Could not load: $error", color = RecordRed, fontSize = 13.sp)
+        items.isEmpty() -> Text("Nothing learned yet. Names appear here after the next reports.", color = JomiTextMuted, fontSize = 13.sp)
+        else -> items.groupBy { it["balgruh"]?.toString().orEmpty() }.forEach { (balgruh, names) ->
+            Text(balgruh.ifBlank { "Everywhere" }, color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
+            names.forEach { n ->
+                @Suppress("UNCHECKED_CAST")
+                val wrong = (n["wrong_spellings"] as? List<Any?>).orEmpty().map { it.toString() }
+                val heard = (n["heard_count"] as? Number)?.toInt() ?: 0
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                        Text(n["name"]?.toString().orEmpty(), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(listOfNotNull(
+                            wrong.takeIf { it.isNotEmpty() }?.let { "fixes: " + it.joinToString(", ") },
+                            "heard in $heard report${if (heard == 1) "" else "s"}"
+                        ).joinToString(" · "), color = JomiTextMuted, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { forget = n }) { Text("Remove", color = RecordRed, fontSize = 12.sp) }
+                }
+            }
+        }
+    }
+    forget?.let { n ->
+        AlertDialog(
+            onDismissRequest = { forget = null },
+            title = { Text("Remove \"${n["name"]}\"?") },
+            text = { Text("Jomi stops using this name and its corrections. It can be learned again later.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = (n["id"] as? Number)?.toLong()
+                    forget = null
+                    if (id != null) scope.launch {
+                        api.forgetLearnedName(id).onSuccess { load() }
+                            .onFailure { android.widget.Toast.makeText(context, it.message ?: "Could not remove", android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                }) { Text("Remove", color = RecordRed) }
+            },
+            dismissButton = { TextButton(onClick = { forget = null }) { Text("Cancel") } }
+        )
     }
 }
 

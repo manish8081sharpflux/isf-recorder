@@ -63,7 +63,7 @@ def test_report_lifecycle(client, staff, admin, fake_ai):
     with SessionLocal() as s:
         ops = [r[0] for r in s.execute(text("SELECT operation_type FROM isf_recorder.gemini_usage_log WHERE recording_id = :id"),
                                        {"id": rid}).fetchall()]
-    assert ops == ["REPORT"]
+    assert [o for o in ops if o != "NAMES"] == ["REPORT"]   # NAMES = name memory, in the background
 
     r = client.put(f"/recordings/{rid}/report", json={"content": "edited by coach"}, headers=staff["headers"])
     assert r.status_code == 200 and r.json()["updated_by_name"] == staff["name"] and r.json()["status"] == "draft"

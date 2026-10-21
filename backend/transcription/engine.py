@@ -164,7 +164,7 @@ async def process_recording_pipeline(recording_id: str, model_override: Optional
 
         rec = db.execute(text("""
             SELECT r.id, r.org_id, r.user_id, r.audio_file_path, r.title, r.status, r.started_at, r.mode,
-                   COALESCE(LENGTH(r.transcript), 0) > 0 AS has_transcript
+                   r.balgruh_name, r.source, COALESCE(LENGTH(r.transcript), 0) > 0 AS has_transcript
             FROM isf_recorder.recording r WHERE r.id = :id
         """), {"id": recording_id}).fetchone()
         if not rec:
@@ -258,6 +258,18 @@ async def process_recording_pipeline(recording_id: str, model_override: Optional
         detected_language = stt_result.get("detected_language", "mixed")
         confidence = float(stt_result.get("confidence", 0.9))
         segments = stt_result.get("segments", [])
+        # Name memory (21 Oct): spellings people corrected before ("Pavnesh" → "Bhavnesh") are fixed right away
+        if org_id_str and rec.source != "call":
+            try:
+                from backend.names.memory import apply_fixes, fixes
+                pairs = fixes(db, org_id_str, rec.balgruh_name)
+                if pairs:
+                    full_transcript = apply_fixes(full_transcript, pairs)
+                    for seg in segments:
+                        seg["text"] = apply_fixes(seg.get("text", ""), pairs)
+            except Exception as ne:
+                db.rollback()
+                logger.warning(f"Name fixes skipped for {recording_id}: {ne}")
 
         db.execute(text("DELETE FROM isf_recorder.transcript_segment WHERE recording_id = :id"), {"id": recording_id})
         for seg in segments:
