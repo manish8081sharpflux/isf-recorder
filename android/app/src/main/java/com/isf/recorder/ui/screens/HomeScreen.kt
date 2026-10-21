@@ -22,6 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -120,11 +126,26 @@ fun HomeScreen(
     // Tapping a card jumps up to the player; closing a report / Director's POV opened from there scrolls back down
     // to that card (21 Oct). Only while the person is still up at the player (they did not scroll away themselves).
     var returnScroll by rememberSaveable { mutableStateOf<Int?>(null) }
+    val scrollContent = remember { CoordsHolder() }     // the scrolling content (to find the player inside it)
+    val playerAnchor = remember { CoordsHolder() }      // the player block
+    fun playerY(): Int? {
+        val content = scrollContent.coords ?: return null
+        val player = playerAnchor.coords?.takeIf { it.isAttached } ?: return null
+        return content.localPositionOf(player, androidx.compose.ui.geometry.Offset.Zero).y.toInt().coerceAtLeast(0)
+    }
+    var scrollToPlayer by remember { mutableStateOf(false) }
+    LaunchedEffect(scrollToPlayer) {
+        if (!scrollToPlayer) return@LaunchedEffect
+        delay(60)                                          // let the newly selected player lay out
+        scrollState.animateScrollTo(((playerY() ?: 0) - 12).coerceAtLeast(0))
+        scrollToPlayer = false
+    }
     var returnOnEnter by rememberSaveable { mutableStateOf<Int?>(null) }   // full report / transcript opened: on Back
     fun backToCard(leaving: Boolean = false) {   // leaving = another screen opens right away (Home is rebuilt on Back)
         val to = returnScroll ?: return
         returnScroll = null
-        if (scrollState.value >= 300) return
+        // only while the person is still at the player (they did not scroll away themselves)
+        if (kotlin.math.abs(scrollState.value - (playerY() ?: 0)) >= 300) return
         if (leaving) returnOnEnter = to else scope.launch { scrollState.animateScrollTo(to) }
     }
     LaunchedEffect(Unit) {
@@ -220,7 +241,7 @@ fun HomeScreen(
             onOpen = {
                 vm.select(rec)
                 returnScroll = scrollState.value          // where the card was: closing its report comes back here
-                scope.launch { scrollState.animateScrollTo(0) }
+                scrollToPlayer = true                     // jump up to the player (after it is laid out)
             },
             onReport = { reportFor = rec },
             onChat = { onOpenChat(id, cleanTitle(rec)) },
@@ -240,203 +261,163 @@ fun HomeScreen(
         )
     }
 
+    // Home redesign (21 Oct): teal header, Meeting / Schedule / Calls card, ISF Bandhu card, the player, Previous
+    // recordings; the recorder is a panel fixed at the bottom (always reachable without scrolling).
+    var panelHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val panelHeight = with(density) { panelHeightPx.toDp() }
+    val showPanel = !(vm.callsTab && !hasSession)
+    var bandhuSoon by remember { mutableStateOf(false) }
+
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .onGloballyPositioned { scrollContent.coords = it }
         ) {
             HomeHeader(prefs, cfg, onSettings)
-            Spacer(Modifier.height(16.dp))
-            NotificationsOffBanner(Modifier.padding(bottom = 12.dp))
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                if (cfg.modes.size > 1) {
+                    HomeTabs(cfg.modes + "calls", if (vm.callsTab && !hasSession) "calls" else mode,
+                        { if (it == "calls") vm.callsTab = true else { vm.callsTab = false; vm.mode = it } },
+                        enabled = !hasSession, modifier = Modifier.pullUp(34.dp))
+                } else Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
+                NotificationsOffBanner(Modifier.padding(bottom = 12.dp))
 
-            if (cfg.modes.size > 1) {
-                ModeToggle(cfg.modes + "calls", if (vm.callsTab && !hasSession) "calls" else mode,
-                    { if (it == "calls") vm.callsTab = true else { vm.callsTab = false; vm.mode = it } }, enabled = !hasSession)
-                Spacer(Modifier.height(14.dp))
-            }
+                if (vm.callsTab && !hasSession) {
+                    CallsTab(api, isAdmin, callsRefresh, onOpenCall = { reportFor = it }, onOpenSettings = onSettings)
+                } else {
+                    BandhuCard(onAsk = { bandhuSoon = true })
 
-            if (vm.callsTab && !hasSession) {
-                CallsTab(api, isAdmin, callsRefresh, onOpenCall = { reportFor = it }, onOpenSettings = onSettings)
-            } else {
-            if (mode == "schedule") {
-                SelectDropdown(
-                    label = "Balgruha name",
-                    options = cfg.balgruhs,
-                    selected = vm.balgruh,
-                    onSelect = { vm.balgruh = it },
-                    enabled = !hasSession,
-                    allowCustom = cfg.balgruhs.isEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(10.dp))
-                MultiSelectDropdown(
-                    label = "Assistant ${cfg.roleLabel.lowercase()}",
-                    options = cfg.coaches,
-                    selected = vm.coaches,
-                    onChange = { vm.coaches = it },
-                    placeholder = "Choose one or more",
-                    enabled = !hasSession,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                Text("Meeting name", color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    // ── Player + status for the selected / last recording ─────────────────
+                    if (!hasSession) {
+                        if (finished?.uploadPending == true && vm.selected == null) {
+                            Spacer(Modifier.height(12.dp))
+                            TranscriptionStatusCard(TranscriptionUi.Offline, {}, {})
+                        } else if (target != null && targetId != null) {
+                            Spacer(Modifier.height(12.dp))
+                            Column(Modifier.onGloballyPositioned { playerAnchor.coords = it }) {
+                                PlayerCard(
+                                    rec = target,
+                                    statusItem = vm.statusItem,
+                                    api = api,
+                                    retrying = vm.retrying,
+                                    onRetry = { vm.retry(cleanTitle(target)) { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } },
+                                    onReport = { reportFor = (vm.statusItem?.let { target + it } ?: target) },
+                                    onChat = { onOpenChat(targetId, cleanTitle(target)) },
+                                    onCopy = { scope.launch { copyOrShareRecording(context, api, target, share = false) } },
+                                    onShare = { scope.launch { copyOrShareRecording(context, api, target, share = true) } },
+                                    showOwner = isAdmin,
+                                    // Director's POV: admins only (not while a super admin views as Coach), never calls
+                                    onDirectorPov = if (isAdmin && target["source"]?.toString() != "call") ({ povFor = target + ("id" to targetId) }) else null
+                                )
+                            }
+                        }
+                    }
+
+                // ── Recordings ─────────────────────────────────────────────────────────
+                // "See all" stays open when coming Back from a report / chat / transcript; Settings resets it (MainActivity)
+                Spacer(Modifier.height(20.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        if (vm.allExpanded) (if (isAdmin) "All recordings" else "All my recordings") else "Previous recordings",
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        // See all opens in place for everyone (admins too: no separate page, 13 Oct)
+                        vm.allExpanded = !vm.allExpanded
+                        if (vm.allExpanded) vm.loadAll(reset = true)
+                    }) {
+                        Text(if (vm.allExpanded) "Show less" else "See all", color = JomiTeal, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                RecordingFilters(vm = vm, cfg = cfg, isAdmin = isAdmin, schedule = mode == "schedule")
                 Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = vm.meetingName,
-                    onValueChange = { vm.meetingName = it },
-                    enabled = !hasSession,
-                    singleLine = true,
-                    placeholder = { Text("Optional — AI names it if empty", color = JomiTextMuted) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        disabledContainerColor = Color.White,
-                        focusedBorderColor = JomiGreen,
-                        unfocusedBorderColor = JomiBorder
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(10.dp))
-                MultiSelectDropdown(
-                    label = "Participants",
-                    options = cfg.participants,
-                    selected = vm.participants,
-                    onChange = { vm.participants = it },
-                    placeholder = "Choose one or more",
-                    enabled = !hasSession,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            Spacer(Modifier.height(14.dp))
+                if (!selectionMode && (vm.recent.isNotEmpty() || vm.allExpanded)) {
+                    Text("Tip: tap a recording to play it here; long-press to select several.", color = JomiTextMuted, fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(6.dp))
 
-            if (session?.micLost == true) {
-                MicLostPrompt(
-                    message = session?.micMessage,
-                    onUsePhoneMic = { sendAction(AudioRecordingService.ACTION_USE_PHONE_MIC) },
-                    onStop = { sendAction(AudioRecordingService.ACTION_STOP) }
-                )
-            } else {
-                MicStatusBar(externalMic = externalMic, activeMic = session?.micType)
-            }
-            Spacer(Modifier.height(10.dp))
+                if (vm.allExpanded) {
+                    if (vm.allItems.isEmpty() && !vm.allLoading) {
+                        Text(if (vm.filtersActive) "No recordings match these filters." else "No recordings yet.",
+                            color = JomiTextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        vm.allItems.forEach { rec -> key(rec["id"]) { Card(rec) } }
+                    }
+                    if (vm.allLoading) {
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = JomiGreen, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        }
+                    } else if (vm.allItems.size < vm.allTotal) {
+                        OutlinedButton(
+                            onClick = { vm.loadAll(reset = false) },
+                            border = BorderStroke(1.dp, JomiMintBorder),
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                        ) { Text("Load older (${vm.allItems.size} of ${vm.allTotal})", color = JomiTeal) }
+                    }
+                    TextButton(
+                        onClick = { vm.allExpanded = false },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) { Text("Show less", color = JomiTeal, fontWeight = FontWeight.SemiBold) }
+                } else when {
+                    vm.recentLoading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = JomiGreen, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                    vm.recent.isEmpty() -> Text(
+                        text = vm.recentError?.let { "Could not load recordings: $it" }
+                            ?: if (vm.filtersActive) "No recordings match these filters." else "No recordings yet. Your recordings will appear here.",
+                        color = JomiTextMuted,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                    else -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        vm.recent.forEach { rec -> key(rec["id"]) { Card(rec) } }
+                        OutlinedButton(
+                            onClick = { vm.allExpanded = true; vm.loadAll(reset = true) },
+                            border = BorderStroke(1.dp, JomiMintBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("See all recordings", color = JomiTeal, fontWeight = FontWeight.SemiBold) }
+                    }
+                }
 
-            RecorderCard(
+                }   // end of recordings view (Calls tab replaces it)
+                Spacer(Modifier.height((if (showPanel) panelHeight else 0.dp) + if (selectionMode) 96.dp else 24.dp))
+            }
+        }
+
+        if (showPanel) {
+            RecorderPanel(
+                mode = mode,
+                cfg = cfg,
+                vm = vm,
                 session = session,
                 starting = vm.starting,
                 finished = finished?.takeIf { vm.selected == null },
                 mic = mic,
+                externalMic = externalMic,
                 amplitude = liveAmplitude,
-                mode = mode,
                 canStart = !hasSession && mic != MicReadiness.IN_CALL && ready,
+                locked = hasSession,
                 onRecord = { startRecording() },
                 onPause = { sendAction(AudioRecordingService.ACTION_PAUSE) },
                 onResume = { sendAction(AudioRecordingService.ACTION_RESUME) },
-                onStop = { sendAction(AudioRecordingService.ACTION_STOP) }
+                onStop = { sendAction(AudioRecordingService.ACTION_STOP) },
+                onUsePhoneMic = { sendAction(AudioRecordingService.ACTION_USE_PHONE_MIC) },
+                modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { panelHeightPx = it.height }
             )
-
-            // ── Player + status for the selected / last recording ─────────────────
-            if (!hasSession) {
-                if (finished?.uploadPending == true && vm.selected == null) {
-                    Spacer(Modifier.height(12.dp))
-                    TranscriptionStatusCard(TranscriptionUi.Offline, {}, {})
-                } else if (target != null && targetId != null) {
-                    Spacer(Modifier.height(12.dp))
-                    PlayerCard(
-                        rec = target,
-                        statusItem = vm.statusItem,
-                        api = api,
-                        retrying = vm.retrying,
-                        onRetry = { vm.retry(cleanTitle(target)) { Toast.makeText(context, it, Toast.LENGTH_LONG).show() } },
-                        onReport = { reportFor = (vm.statusItem?.let { target + it } ?: target) },
-                        onChat = { onOpenChat(targetId, cleanTitle(target)) },
-                        onCopy = { scope.launch { copyOrShareRecording(context, api, target, share = false) } },
-                        onShare = { scope.launch { copyOrShareRecording(context, api, target, share = true) } },
-                        showOwner = isAdmin,
-                        // Director's POV: admins only (not while a super admin views as Coach), never calls
-                        onDirectorPov = if (isAdmin && target["source"]?.toString() != "call") ({ povFor = target + ("id" to targetId) }) else null
-                    )
-                }
-            }
-
-            // ── Recordings ─────────────────────────────────────────────────────────
-            // "See all" stays open when coming Back from a report / chat / transcript; Settings resets it (MainActivity)
-            Spacer(Modifier.height(20.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    if (vm.allExpanded) (if (isAdmin) "All recordings" else "All my recordings") else "Previous recordings",
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = {
-                    // See all opens in place for everyone (admins too: no separate page, 13 Oct)
-                    vm.allExpanded = !vm.allExpanded
-                    if (vm.allExpanded) vm.loadAll(reset = true)
-                }) {
-                    Text(if (vm.allExpanded) "Show less" else "See all", color = JomiTeal, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            RecordingFilters(vm = vm, cfg = cfg, isAdmin = isAdmin, schedule = mode == "schedule")
-            Spacer(Modifier.height(6.dp))
-            if (!selectionMode && (vm.recent.isNotEmpty() || vm.allExpanded)) {
-                Text("Tip: tap a recording to play it here; long-press to select several.", color = JomiTextMuted, fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(6.dp))
-
-            if (vm.allExpanded) {
-                if (vm.allItems.isEmpty() && !vm.allLoading) {
-                    Text(if (vm.filtersActive) "No recordings match these filters." else "No recordings yet.",
-                        color = JomiTextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    vm.allItems.forEach { rec -> key(rec["id"]) { Card(rec) } }
-                }
-                if (vm.allLoading) {
-                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = JomiGreen, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    }
-                } else if (vm.allItems.size < vm.allTotal) {
-                    OutlinedButton(
-                        onClick = { vm.loadAll(reset = false) },
-                        border = BorderStroke(1.dp, JomiMintBorder),
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                    ) { Text("Load older (${vm.allItems.size} of ${vm.allTotal})", color = JomiTeal) }
-                }
-                TextButton(
-                    onClick = { vm.allExpanded = false },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                ) { Text("Show less", color = JomiTeal, fontWeight = FontWeight.SemiBold) }
-            } else when {
-                vm.recentLoading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = JomiGreen, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                }
-                vm.recent.isEmpty() -> Text(
-                    text = vm.recentError?.let { "Could not load recordings: $it" }
-                        ?: if (vm.filtersActive) "No recordings match these filters." else "No recordings yet. Your recordings will appear here.",
-                    color = JomiTextMuted,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
-                else -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    vm.recent.forEach { rec -> key(rec["id"]) { Card(rec) } }
-                    OutlinedButton(
-                        onClick = { vm.allExpanded = true; vm.loadAll(reset = true) },
-                        border = BorderStroke(1.dp, JomiMintBorder),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("See all recordings", color = JomiTeal, fontWeight = FontWeight.SemiBold) }
-                }
-            }
-            }   // end of recordings view (Calls tab replaces it)
-            Spacer(Modifier.height(if (selectionMode) 96.dp else 24.dp))
         }
 
         ScrollToTopButton(
             scrollState,
-            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = if (selectionMode) 88.dp else 20.dp)
+            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp,
+                bottom = (if (showPanel) panelHeight else 0.dp) + if (selectionMode) 84.dp else 12.dp)
         )
 
         if (selectionMode) {
@@ -446,9 +427,19 @@ fun HomeScreen(
                 onMerge = { mergeTargets = pool.filter { it["id"]?.toString() in selectedIds } },
                 onDelete = { eraseTargets = pool.filter { it["id"]?.toString() in selectedIds } },
                 onCancel = { selectedIds = emptySet() },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp,
+                    bottom = (if (showPanel) panelHeight else 0.dp) + 12.dp)
             )
         }
+    }
+
+    if (bandhuSoon) {
+        AlertDialog(
+            onDismissRequest = { bandhuSoon = false },
+            title = { Text("🤖 ISF Bandhu", fontWeight = FontWeight.Bold) },
+            text = { Text("Coming soon! You will be able to ask ISF Bandhu specific questions here.") },
+            confirmButton = { TextButton(onClick = { bandhuSoon = false }) { Text("OK", color = JomiTeal) } }
+        )
     }
 
     if (confirmPhoneMic) {
@@ -499,6 +490,17 @@ fun HomeScreen(
     }
 }
 
+/** Holds layout coordinates without causing recomposition. */
+private class CoordsHolder { var coords: LayoutCoordinates? = null }
+
+/** Moves an element up by [by] and takes that much less space (the tabs card overlapping the header). */
+private fun Modifier.pullUp(by: androidx.compose.ui.unit.Dp) = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val px = by.roundToPx()
+    layout(placeable.width, (placeable.height - px).coerceAtLeast(0)) { placeable.place(0, -px) }
+}
+
+/** Teal header (21 Oct): avatar (opens Settings), name, "ISF · ADMIN" pill, date, Live sync pill. */
 @Composable
 private fun HomeHeader(prefs: UserPreferences, cfg: RecorderConfig, onSettings: () -> Unit) {
     val context = LocalContext.current
@@ -509,58 +511,119 @@ private fun HomeHeader(prefs: UserPreferences, cfg: RecorderConfig, onSettings: 
     val name = prefs.userName?.takeIf { it.isNotBlank() } ?: cfg.roleLabel
     val roleText = if (prefs.isAdmin) "Admin" else cfg.roleLabel
 
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(name, color = MaterialTheme.colorScheme.onBackground, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                "${prefs.orgName ?: "ISF"} · ${roleText.uppercase()}",
-                color = JomiGreen,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-                maxLines = 1
-            )
-            Text(todayHeaderDate(), color = JomiTextMuted, fontSize = 12.sp)
-        }
-        // Live sync pill (tap = upload now)
-        Surface(
-            onClick = {
-                when {
-                    !isOnline -> Toast.makeText(context, "Offline — $pending audio pieces waiting to upload", Toast.LENGTH_SHORT).show()
-                    pending > 0 -> {
-                        ChunkUploader.scheduleOfflineSync(context)
-                        Toast.makeText(context, "Uploading $pending audio pieces…", Toast.LENGTH_SHORT).show()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF16A37F), Color(0xFF0F8F72))))
+            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 52.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            // Avatar opens Settings directly (round 2)
+            Surface(onClick = onSettings, shape = CircleShape, color = Color.White, modifier = Modifier.size(58.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(initialsOf(name), color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(name, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(3.dp))
+                Surface(color = Color.White.copy(alpha = 0.2f), shape = RoundedCornerShape(10.dp)) {
+                    Text("${prefs.orgName ?: "ISF"} · ${roleText.uppercase()}", color = Color.White, fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painterResource(R.drawable.ic_calendar), null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(todayHeaderDate(), color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+                }
+            }
+            // Live sync pill (tap = upload now)
+            Surface(
+                onClick = {
+                    when {
+                        !isOnline -> Toast.makeText(context, "Offline — $pending audio pieces waiting to upload", Toast.LENGTH_SHORT).show()
+                        pending > 0 -> {
+                            ChunkUploader.scheduleOfflineSync(context)
+                            Toast.makeText(context, "Uploading $pending audio pieces…", Toast.LENGTH_SHORT).show()
+                        }
+                        else -> Toast.makeText(context, "Everything is uploaded", Toast.LENGTH_SHORT).show()
                     }
-                    else -> Toast.makeText(context, "Everything is uploaded", Toast.LENGTH_SHORT).show()
+                },
+                color = Color.White.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (isOnline && pending > 0) {
+                        CircularProgressIndicator(modifier = Modifier.size(10.dp), color = Color.White, strokeWidth = 1.5.dp)
+                    } else {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (isOnline) Color(0xFF4ADE80) else WarningOrange))
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = when {
+                            !isOnline -> "Offline ($pending)"
+                            pending > 0 -> "Syncing ($pending)"
+                            else -> "Live sync"
+                        },
+                        color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1
+                    )
                 }
-            },
-            color = Color.Transparent,
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (isOnline && pending > 0) {
-                    CircularProgressIndicator(modifier = Modifier.size(10.dp), color = JomiGreen, strokeWidth = 1.5.dp)
-                } else {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (isOnline) JomiGreen else WarningOrange))
-                }
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = when {
-                        !isOnline -> "Offline ($pending)"
-                        pending > 0 -> "Syncing ($pending)"
-                        else -> "Live sync"
-                    },
-                    color = if (isOnline) JomiGreen else WarningOrange,
-                    fontSize = 12.sp,
-                    maxLines = 1
-                )
             }
         }
-        Spacer(Modifier.width(4.dp))
-        // Avatar opens Settings directly (round 2)
-        Surface(onClick = onSettings, shape = CircleShape, color = JomiMint, modifier = Modifier.size(46.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(initialsOf(name), color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    }
+}
+
+/** Meeting / Schedule / Calls in a white card that overlaps the header; locked while a recording runs. */
+@Composable
+private fun HomeTabs(modes: List<String>, selected: String, onSelect: (String) -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+    Surface(color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 4.dp, modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            modes.forEach { m ->
+                val sel = m == selected
+                val icon = when (m) { "meeting" -> R.drawable.ic_people; "calls" -> R.drawable.ic_phone; else -> R.drawable.ic_calendar }
+                val label = when (m) { "calls" -> "Calls"; else -> modeLabel(m) ?: m.replaceFirstChar { it.uppercase() } }
+                Surface(
+                    onClick = { if (enabled && !sel) onSelect(m) },
+                    enabled = enabled || sel,
+                    color = if (sel) JomiMint else JomiBg,
+                    border = if (sel) BorderStroke(1.dp, JomiMintBorder) else null,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f).height(52.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        val tint = when { sel -> JomiTeal; !enabled -> JomiTextMuted.copy(alpha = 0.5f); else -> JomiTextMuted }
+                        Icon(painterResource(icon), null, tint = tint, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(label, color = tint, fontSize = 14.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "ISF Bandhu" card (21 Oct): the assistant is not ready yet, so Ask Bandhu says "Coming soon". */
+@Composable
+private fun BandhuCard(onAsk: () -> Unit) {
+    Surface(color = JomiMint.copy(alpha = 0.6f), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, JomiMintBorder),
+        modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(56.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
+                Text("🤖", fontSize = 30.sp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("ISF Bandhu", color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("Ask specific questions from Playground using ISF Bandhu.", color = JomiTextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+            }
+            Spacer(Modifier.width(8.dp))
+            Surface(onClick = onAsk, color = Color.White, shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, JomiMintBorder)) {
+                Text("Ask Bandhu →", color = JomiTeal, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
             }
         }
     }
@@ -642,19 +705,29 @@ private fun PlayerCard(
     }
 }
 
+/**
+ * The recorder, fixed at the bottom of Home (21 Oct): Balgruha + Assistant coach (or Meeting name + Participants)
+ * side by side, mic status, timer, Pause · Record · Stop. While recording it also shows the waveform and status.
+ */
 @Composable
-private fun RecorderCard(
+private fun RecorderPanel(
+    mode: String,
+    cfg: RecorderConfig,
+    vm: HomeViewModel,
     session: RecordingSessionInfo?,
     starting: Boolean,
     finished: FinishedSession?,
     mic: MicReadiness,
+    externalMic: com.isf.recorder.data.model.MicType?,
     amplitude: Float,
-    mode: String,
     canStart: Boolean,
+    locked: Boolean,
     onRecord: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onUsePhoneMic: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val status = session?.status
     val isRecording = status == RecordingStatus.RECORDING
@@ -662,89 +735,136 @@ private fun RecorderCard(
     val isFinalizing = status == RecordingStatus.FINALIZING
     val showFinished = session == null && !starting && finished != null
 
-    JomiCard(padding = 18.dp) {
-        session?.micMessage?.takeIf { it.isNotBlank() && !session.micLost }?.let {
-            MessageBanner(it, color = if (it == AudioRecordingService.MSG_MIC_CONNECTED) JomiGreen else WarningOrange)
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shadowElevation = 16.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) {
+            Box(Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(JomiBorder))
             Spacer(Modifier.height(10.dp))
-        }
-        if (status == RecordingStatus.PAUSED_CONFLICT && session?.micMessage.isNullOrBlank()) {
-            MessageBanner("Paused — the microphone is busy (call). Tap Resume when the call ends.")
+
+            if (session?.micLost == true) {
+                MicLostPrompt(message = session.micMessage, onUsePhoneMic = onUsePhoneMic, onStop = onStop)
+                Spacer(Modifier.height(8.dp))
+            } else {
+                MicStatusBar(externalMic = externalMic, activeMic = session?.micType)
+                Spacer(Modifier.height(10.dp))
+            }
+            session?.micMessage?.takeIf { it.isNotBlank() && !session.micLost }?.let {
+                MessageBanner(it, color = if (it == AudioRecordingService.MSG_MIC_CONNECTED) JomiGreen else WarningOrange)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (status == RecordingStatus.PAUSED_CONFLICT && session?.micMessage.isNullOrBlank()) {
+                MessageBanner("Paused — the microphone is busy (call). Tap Resume when the call ends.")
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // Who / where: two fields side by side
+            Row(verticalAlignment = Alignment.Bottom) {
+                if (mode == "schedule") {
+                    SinglePicker(
+                        label = "Balgruha name", sheetTitle = "Select Balgruha", searchHint = "Search Balgruha…",
+                        options = cfg.balgruhs, selected = vm.balgruh, onSelect = { vm.balgruh = it },
+                        enabled = !locked, allowCustom = cfg.balgruhs.isEmpty(), modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    MultiPicker(
+                        label = "Assistant ${cfg.roleLabel.lowercase()}", sheetTitle = "Select Assistant ${cfg.roleLabel.lowercase()}",
+                        searchHint = "Search ${cfg.roleLabel.lowercase()}…", options = cfg.coaches, selected = vm.coaches,
+                        onChange = { vm.coaches = it }, enabled = !locked,
+                        subtitle = { "Assistant ${cfg.roleLabel.lowercase()}" }, modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Column(Modifier.weight(1f)) {
+                        Text("Meeting name", color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = vm.meetingName, onValueChange = { vm.meetingName = it }, enabled = !locked, singleLine = true,
+                            placeholder = { Text("Optional", color = JomiTextMuted, fontSize = 14.sp) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color.White, unfocusedContainerColor = Color.White, disabledContainerColor = Color.White,
+                                focusedBorderColor = JomiGreen, unfocusedBorderColor = JomiBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    MultiPicker(
+                        label = "Participants", sheetTitle = "Select participants", searchHint = "Search name…",
+                        options = cfg.participants, selected = vm.participants, onChange = { vm.participants = it },
+                        enabled = !locked, modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             Spacer(Modifier.height(10.dp))
-        }
 
-        // The big MicStatusBar above shows which mic is used; this line only reports readiness problems.
-        if (session == null && mic != MicReadiness.READY) Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_mic_outline), null, tint = JomiTextMuted, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = if (session != null) session.micType.label else mic.label,
-                color = if (session == null && mic != MicReadiness.READY) WarningOrange else JomiTextMuted,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        WaveformVisualizer(
-            isRecording = isRecording && session?.voiceActive != false,
-            isPaused = isPaused || (isRecording && session?.voiceActive == false),
-            amplitude = if (session != null) amplitude else 0f,
-            barCount = 44,
-            modifier = Modifier.fillMaxWidth().height(40.dp)
-        )
-        Spacer(Modifier.height(6.dp))
+            if (session != null) {
+                WaveformVisualizer(
+                    isRecording = isRecording && session.voiceActive,
+                    isPaused = isPaused || (isRecording && !session.voiceActive),
+                    amplitude = amplitude, barCount = 44,
+                    modifier = Modifier.fillMaxWidth().height(30.dp)
+                )
+                Spacer(Modifier.height(6.dp))
+            }
 
-        val seconds = session?.durationSeconds ?: if (showFinished) finished!!.voiceSeconds else 0
-        Text(
-            text = clockHms(seconds),
-            color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 44.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            modifier = Modifier.fillMaxWidth()
-        )
-        val statusLine = when {
-            starting && session == null -> "Starting…"
-            isFinalizing -> "Saving…"
-            status == RecordingStatus.PAUSED_CONFLICT -> "Paused — microphone busy"
-            status == RecordingStatus.PAUSED_USER -> "Paused"
-            isRecording && session?.voiceActive == false -> "Listening — silence not saved"
-            isRecording -> "Recording…"
-            showFinished && !finished!!.uploadPending -> "Recording saved · ${humanDuration(finished.voiceSeconds)}"
-            showFinished -> "Saved on phone — will upload when online"
-            !canStart && mic != MicReadiness.IN_CALL && mode == "schedule" -> "Choose the Balgruha and at least one Assistant coach"
-            !canStart && mic != MicReadiness.IN_CALL -> "Add at least one participant"
-            else -> "Ready to record"
-        }
-        Text(statusLine, color = JomiTextMuted, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(16.dp))
+            val seconds = session?.durationSeconds ?: if (showFinished) finished!!.voiceSeconds else 0
+            Surface(color = JomiMint, shape = RoundedCornerShape(16.dp), modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text(clockHms(seconds), color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
+            val statusLine = when {
+                starting && session == null -> "Starting…"
+                isFinalizing -> "Saving…"
+                status == RecordingStatus.PAUSED_CONFLICT -> "Paused — microphone busy"
+                status == RecordingStatus.PAUSED_USER -> "Paused"
+                isRecording && session?.voiceActive == false -> "Listening — silence not saved"
+                isRecording -> "Recording…"
+                showFinished && !finished!!.uploadPending -> "Recording saved · ${humanDuration(finished.voiceSeconds)}"
+                showFinished -> "Saved on phone — will upload when online"
+                session == null && mic != MicReadiness.READY -> mic.label
+                !canStart && mode == "schedule" -> "Choose the Balgruha and at least one Assistant coach"
+                !canStart -> "Add at least one participant"
+                else -> null      // ready: nothing to say
+            }
+            statusLine?.let {
+                Text(it, color = if (session == null && mic != MicReadiness.READY) WarningOrange else JomiTextMuted, fontSize = 12.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+            }
+            Spacer(Modifier.height(8.dp))
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RoundControl(
-                icon = R.drawable.ic_mic,
-                label = if (isRecording) "Recording" else "Record",
-                enabled = canStart,
-                style = if (session != null || starting) ControlStyle.Live else ControlStyle.Primary,
-                pulsing = isRecording,
-                onClick = onRecord
-            )
-            RoundControl(
-                icon = if (isPaused) R.drawable.ic_play else R.drawable.ic_pause,
-                label = if (isPaused) "Resume" else "Pause",
-                enabled = isRecording || isPaused,
-                style = if (isPaused) ControlStyle.Primary else ControlStyle.Neutral,
-                onClick = { if (isPaused) onResume() else onPause() }
-            )
-            RoundControl(
-                icon = R.drawable.ic_stop,
-                label = if (isFinalizing) "Saving…" else "Stop",
-                enabled = isRecording || isPaused,
-                style = ControlStyle.Danger,
-                busy = isFinalizing,
-                onClick = onStop
-            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                RoundControl(
+                    icon = if (isPaused) R.drawable.ic_play else R.drawable.ic_pause,
+                    label = if (isPaused) "Resume" else "Pause",
+                    enabled = isRecording || isPaused,
+                    style = if (isPaused) ControlStyle.Primary else ControlStyle.Neutral,
+                    onClick = { if (isPaused) onResume() else onPause() },
+                    size = 54.dp
+                )
+                RoundControl(
+                    icon = R.drawable.ic_mic,
+                    label = if (isRecording) "Recording" else "Record",
+                    enabled = canStart,
+                    style = if (session != null || starting) ControlStyle.Live else ControlStyle.Primary,
+                    pulsing = isRecording,
+                    onClick = onRecord,
+                    size = 74.dp
+                )
+                RoundControl(
+                    icon = R.drawable.ic_stop,
+                    label = if (isFinalizing) "Saving…" else "Stop",
+                    enabled = isRecording || isPaused,
+                    style = ControlStyle.Danger,
+                    busy = isFinalizing,
+                    onClick = onStop,
+                    size = 54.dp
+                )
+            }
         }
     }
 }
@@ -759,7 +879,8 @@ private fun RoundControl(
     style: ControlStyle,
     onClick: () -> Unit,
     pulsing: Boolean = false,
-    busy: Boolean = false
+    busy: Boolean = false,
+    size: androidx.compose.ui.unit.Dp = 64.dp
 ) {
     val transition = rememberInfiniteTransition(label = "pulse")
     val pulse by transition.animateFloat(
@@ -783,7 +904,7 @@ private fun RoundControl(
             color = bg,
             border = BorderStroke(1.5.dp, border),
             shadowElevation = if (enabled && style == ControlStyle.Primary) 3.dp else 0.dp,
-            modifier = Modifier.size(64.dp).scale(pulse)
+            modifier = Modifier.size(size).scale(pulse)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (busy) {
