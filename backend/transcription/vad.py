@@ -6,6 +6,9 @@ voice. A 512-sample frame (32 ms at 16 kHz) counts as voice when (contract §10)
 
     silero_prob >= VAD_THRESHOLD (default 0.4)   OR   frame RMS > VAD_LOUD_DBFS (default -40 dBFS)
 
+The RMS is measured on the speech band only (21 Oct, Bhavnesh): VAD_LOW_HZ (80) – VAD_HIGH_HZ (8,000) Hz,
+so fan / AC hum and thumps below 80 Hz do not count as loud. Silero gets the unfiltered audio.
+
 The loudness rule keeps noisy rooms (where Silero can score low-SNR speech near 0) from ever being
 skipped; only near-silent windows are skipped. The model file is the same one the Android app uses.
 
@@ -39,6 +42,8 @@ def _env_float(name: str, default: float) -> float:
 
 VAD_THRESHOLD = _env_float("VAD_THRESHOLD", 0.4)
 VAD_LOUD_DBFS = _env_float("VAD_LOUD_DBFS", -40.0)
+VAD_LOW_HZ = _env_float("VAD_LOW_HZ", 80.0)
+VAD_HIGH_HZ = _env_float("VAD_HIGH_HZ", 8000.0)
 
 _session = None
 _session_lock = threading.Lock()
@@ -76,6 +81,19 @@ def frame_dbfs(frames: np.ndarray) -> np.ndarray:
         return 20.0 * np.log10(rms)
 
 
+def speech_band(x: np.ndarray, low_hz: Optional[float] = None, high_hz: Optional[float] = None) -> np.ndarray:
+    """Keep only low_hz..high_hz of a whole signal (one FFT over all of it, so even 50 Hz hum is separated
+    cleanly; a 32 ms frame is too short for that). Used only to measure loudness, never to change the audio."""
+    lo = VAD_LOW_HZ if low_hz is None else low_hz
+    hi = VAD_HIGH_HZ if high_hz is None else high_hz
+    if len(x) == 0:
+        return x
+    spec = np.fft.rfft(x.astype(np.float64))
+    freqs = np.fft.rfftfreq(len(x), d=1.0 / SAMPLE_RATE)
+    spec[(freqs < lo) | (freqs > hi)] = 0
+    return np.fft.irfft(spec, n=len(x)).astype(np.float32)
+
+
 def voice_frames(pcm, threshold: Optional[float] = None, loud_dbfs: Optional[float] = None,
                  stop_after_seconds: Optional[float] = None) -> np.ndarray:
     """
@@ -91,7 +109,8 @@ def voice_frames(pcm, threshold: Optional[float] = None, loud_dbfs: Optional[flo
     if n == 0:
         return flags
     frames = x[: n * FRAME_SAMPLES].reshape(n, FRAME_SAMPLES)
-    loud_flags = frame_dbfs(frames) > loud
+    band = speech_band(x[: n * FRAME_SAMPLES]).reshape(n, FRAME_SAMPLES)
+    loud_flags = frame_dbfs(band) > loud   # speech band only (hum below 80 Hz is not "loud"); Silero gets raw audio
 
     session = _get_session()
     state = np.zeros((2, 1, 128), dtype=np.float32)

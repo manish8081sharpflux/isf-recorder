@@ -39,9 +39,11 @@ class VoiceGateTest {
 
     @Test
     fun loudnessThresholdBoundary() {
-        val g = gate()                          // warm-up floor -60 -> threshold -54
+        val g = gate()                          // warm-up floor -60 -> threshold -54, but never below -40 (21 Oct)
         assertFalse(g.isVoiceFrame(-54f))
-        assertTrue(g.isVoiceFrame(-53.9f))
+        assertFalse(g.isVoiceFrame(-53.9f))     // above the floor rule, below Bhavnesh's -40 minimum
+        assertFalse(g.isVoiceFrame(-40.1f))
+        assertTrue(g.isVoiceFrame(-40f))
         assertFalse(g.isVoiceFrame(Float.NEGATIVE_INFINITY))
         g.feed(0, 200, -41f)                    // floor adapts to -41 -> threshold -35
         assertEquals(-41f, g.noiseFloorDbfs, 0.001f)
@@ -140,10 +142,12 @@ class VoiceGateTest {
 
     @Test
     fun firstThreeSecondsAreNeverCut() {
-        // a coach starts talking softly (-50 dBFS) right away: the warm-up floor (-60) keeps it
+        // a coach starts talking softly (-38 dBFS) right away: the warm-up floor (-60) keeps it
         val warm = VoiceGate.framesFor(VoiceGate.FLOOR_WARMUP_MS)
-        val w = gate().feedLevels(List(warm) { -50f })
+        val w = gate().feedLevels(List(warm) { -38f })
         assertEquals(warm, w.size)
+        // below the -40 dBFS minimum (21 Oct) nothing is saved, also in the first seconds
+        assertEquals(0, gate().feedLevels(List(warm) { -50f }).size)
     }
 
     @Test

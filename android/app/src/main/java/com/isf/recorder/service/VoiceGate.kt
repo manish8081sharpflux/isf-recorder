@@ -18,8 +18,9 @@ import kotlin.math.sqrt
  *    uploaded); the next speech opens a new chunk lazily. A close is only requested when audio was
  *    written since the last close, so no empty chunks are ever produced.
  *
- * Voice rule (Round 3, adaptive): a frame is VOICE if rms > [ALWAYS_VOICE_DBFS] OR
- * rms > noise floor + [FLOOR_MARGIN_DB], otherwise SILENT. The floor is tracked by [NoiseFloorTracker]
+ * Voice rule (Round 3, adaptive; 21 Oct: Bhavnesh's limits): the caller measures rms in the speech band
+ * 80 – 8,000 Hz ([SpeechBandFilter]). A frame is VOICE if rms >= [MIN_VOICE_DBFS] AND (rms > [ALWAYS_VOICE_DBFS]
+ * OR rms > noise floor + [FLOOR_MARGIN_DB]), otherwise SILENT. The floor is tracked by [NoiseFloorTracker]
  * (10th percentile of the last 10 s, recomputed every second; [WARMUP_FLOOR_DBFS] for the first 3 s).
  * Why: a fixed -45 dBFS threshold saved everything on a phone whose silent room measures a steady
  * -41 dBFS. Validated offline on 4 real Balgruh/meeting recordings (0% audible speech lost).
@@ -30,6 +31,7 @@ class VoiceGate<T>(private val config: Config = Config()) {
 
     data class Config(
         val alwaysVoiceDbfs: Float = ALWAYS_VOICE_DBFS,
+        val minVoiceDbfs: Float = MIN_VOICE_DBFS,
         val floorMarginDb: Float = FLOOR_MARGIN_DB,
         val startFrames: Int = START_FRAMES,
         val preRollFrames: Int = framesFor(PRE_ROLL_MS),
@@ -54,6 +56,7 @@ class VoiceGate<T>(private val config: Config = Config()) {
     companion object {
         // ── Tuning: the ONLY place these values live ──
         const val ALWAYS_VOICE_DBFS = -30f      // rms > this is always voice (noisy rooms are never cut)
+        const val MIN_VOICE_DBFS = -40f         // Bhavnesh (21 Oct): quieter than this (speech band) is never voice
         const val FLOOR_MARGIN_DB = 6f          // ... or rms > noise floor + this
         const val FLOOR_WINDOW_MS = 10_000      // noise floor = percentile of the last 10 s
         const val FLOOR_PERCENTILE = 10         // 10th percentile
@@ -100,7 +103,8 @@ class VoiceGate<T>(private val config: Config = Config()) {
 
     /** Voice rule against the current floor (does not update the floor). */
     fun isVoiceFrame(dbfs: Float): Boolean =
-        dbfs > config.alwaysVoiceDbfs || dbfs > floor.floorDbfs + config.floorMarginDb
+        dbfs >= config.minVoiceDbfs &&
+            (dbfs > config.alwaysVoiceDbfs || dbfs > floor.floorDbfs + config.floorMarginDb)
 
     fun onFrame(frame: T, dbfs: Float): Decision<T> {
         floor.add(dbfs)

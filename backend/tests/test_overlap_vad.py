@@ -133,3 +133,24 @@ def test_vad_speech_inside_silence_window():
     silence = np.zeros(16000 * 60, dtype=np.int16)
     pcm = np.concatenate([silence, np.frombuffer(speech_pcm(), dtype=np.int16), silence])
     assert vad.has_voice(pcm)
+
+
+def _tone(hz, dbfs, seconds=5.0):
+    t = np.arange(int(16000 * seconds)) / 16000.0
+    amp = 10 ** (dbfs / 20.0) * np.sqrt(2) * 32767
+    return (amp * np.sin(2 * np.pi * hz * t)).astype(np.int16)
+
+
+def test_vad_loud_hum_below_80hz_is_not_loud():
+    """Speech band (21 Oct, Bhavnesh): a loud 50 Hz electrical hum is not counted as voice by loudness."""
+    hum = _tone(50, -20)
+    band = vad.speech_band(vad.to_float(hum))[512 * 10: 512 * 110].reshape(100, 512)
+    assert (vad.frame_dbfs(band) < -40).all()
+    assert vad.voice_seconds(hum) < vad.MIN_VOICE_SECONDS
+
+
+def test_vad_band_level_matches_plain_level_for_speech_frequencies():
+    x = vad.to_float(_tone(500, -25))
+    band = vad.speech_band(x)[512 * 10: 512 * 60].reshape(50, 512)
+    plain = x[512 * 10: 512 * 60].reshape(50, 512)
+    assert np.allclose(vad.frame_dbfs(band), vad.frame_dbfs(plain), atol=1.0)

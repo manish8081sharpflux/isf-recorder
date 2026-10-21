@@ -73,6 +73,7 @@ class AudioRecordingService : Service() {
         @Volatile var awaitingMicChoice = false     // external mic lost: never continue on the phone mic silently
         @Volatile var micLostDead = false           // lost because it gave no sound (vs unplugged)
         val gate = VoiceGate<ShortArray>()          // capture thread only
+        val band = SpeechBandFilter()               // capture thread only: speech band (80 – 8,000 Hz) for the voice decision
         val silenceGaps = SilenceGapTracker()       // capture thread only
         val framesHeard = AtomicLong(0)             // frames given to the gate (not paused)
         val sessionSeconds = AtomicInteger(0)
@@ -507,10 +508,12 @@ class AudioRecordingService : Service() {
             if (s.resetRequested) {
                 s.resetRequested = false
                 s.gate.reset()
+                s.band.reset()
                 s.silenceGaps.breakRun()?.let { persistGaps(s) }
             }
             s.framesHeard.incrementAndGet()
-            val d = s.gate.onFrame(frame.copyOf(), dbfs)
+            // voice decision on the speech band only (hum / thumps below 80 Hz do not count); the saved audio is unfiltered
+            val d = s.gate.onFrame(frame.copyOf(), s.band.bandDbfs(frame))
             s.silenceGaps.onFrame(d.write.size, System.currentTimeMillis())?.let { persistGaps(s) }
             if (d.write.isNotEmpty()) s.chunkManager.writeFrames(d.write)
             if (d.closeChunk) s.chunkManager.closeCurrentChunk()
