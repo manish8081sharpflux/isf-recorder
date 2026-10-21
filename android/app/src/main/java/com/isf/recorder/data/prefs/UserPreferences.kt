@@ -19,6 +19,7 @@ class UserPreferences(context: Context) {
         private const val KEY_IS_SUPER_ADMIN = "is_super_admin"
         private const val KEY_NEEDS_NAME = "needs_name"
         private const val KEY_LAST_UPDATE_CHECK = "last_update_check_ms"
+        private const val KEY_LAST_NOTIFIED_UPDATE = "last_notified_update_code"
         private const val KEY_VIEW_AS_COACH = "view_as_coach"
         private const val KEY_ROLE_LABEL = "role_label"
         private const val KEY_RECORDER_CONFIG_JSON = "recorder_config_json"
@@ -67,6 +68,11 @@ class UserPreferences(context: Context) {
     var lastUpdateCheckMs: Long
         get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
+
+    /** The newest version the "update available" phone notification was already shown for (once per version). */
+    var lastNotifiedUpdateCode: Int
+        get() = prefs.getInt(KEY_LAST_NOTIFIED_UPDATE, 0)
+        set(value) = prefs.edit().putInt(KEY_LAST_NOTIFIED_UPDATE, value).apply()
 
     /** Self-signed-up user still on the placeholder name: the app asks "What's your name?". */
     val needsName: Boolean

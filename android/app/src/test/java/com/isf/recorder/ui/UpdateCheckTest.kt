@@ -40,4 +40,13 @@ class UpdateCheckTest {
         assertNull(UpdateCheck.decide(mapOf("version_code" to 9.0), 6, "com.isf.recorder"))
         assertNull(UpdateCheck.decide(emptyMap(), 6, "com.isf.recorder"))
     }
+
+    @Test
+    fun notificationOncePerVersion() {
+        val u = UpdateCheck.decide(latest(7), 6, "com.isf.recorder")
+        assertTrue(UpdateCheck.shouldNotify(u, 0))
+        assertTrue(UpdateCheck.shouldNotify(u, 6))
+        assertFalse(UpdateCheck.shouldNotify(u, 7))      // already shown for 7
+        assertFalse(UpdateCheck.shouldNotify(null, 0))   // up to date
+    }
 }

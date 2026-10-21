@@ -28,6 +28,8 @@ class ISFApplication : Application() {
         RecorderNotifications.ensureChannels(this)
         // Calls (14 Oct): keep the 15-minute call-recording sync running while it is switched on
         com.isf.recorder.sync.CallSync.schedule(this)
+        // Updates (21 Oct): a background check every few hours posts "New version available" once per version
+        com.isf.recorder.sync.UpdateNotifier.schedule(this)
         // Bug M: a recording whose process was killed is saved and finished (nothing in this process records yet).
         val cutoff = processStartMs
         applicationScope.launch(Dispatchers.IO) {

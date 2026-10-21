@@ -24,6 +24,7 @@ object RecorderNotifications {
     const val CHANNEL_RECORDING = "isf_recording_channel"
     const val CHANNEL_ALERTS = "isf_recording_alerts"
     const val CHANNEL_REPORT = "isf_report_channel"
+    const val CHANNEL_UPDATES = "isf_app_updates"
 
     /** Extra on the MainActivity intent: open this recording's Report screen (UI handles it). */
     const val EXTRA_OPEN_RECORDING_ID = "open_recording_id"
@@ -53,6 +54,12 @@ object RecorderNotifications {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_REPORT, "Reports", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Report ready / transcription failed"
+                setShowBadge(true)
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_UPDATES, "App updates", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "A new version of Jomi is available"
                 setShowBadge(true)
             }
         )

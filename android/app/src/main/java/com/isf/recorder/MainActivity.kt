@@ -131,15 +131,29 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) {
                         if (prefs.isLoggedIn) api.getMe().onSuccess { askName = prefs.needsName }
                     }
-                    // "Update available" (at most every 6 h, never during a recording)
+                    // "Update available" (21 Oct): on every app open and every 15 min while it stays open, never
+                    // during a recording. "Later" hides it until the next time the app is opened.
                     var update by remember { mutableStateOf<AppUpdate?>(null) }
+                    var laterFor by remember { mutableIntStateOf(0) }
                     val resumes = resumeCount.intValue
                     LaunchedEffect(resumes) {
-                        if (prefs.isLoggedIn) UpdateCheck.check(api, prefs)?.let { update = it }
+                        laterFor = 0
+                        while (prefs.isLoggedIn) {
+                            if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                                val found = UpdateCheck.check(api, prefs)
+                                if (found != null && found.versionCode != laterFor) {
+                                    update = found
+                                    // Seen in the app: no phone notification needed for this version any more
+                                    if (prefs.lastNotifiedUpdateCode < found.versionCode) prefs.lastNotifiedUpdateCode = found.versionCode
+                                    com.isf.recorder.sync.UpdateNotifier.clear(this@MainActivity)
+                                }
+                            }
+                            kotlinx.coroutines.delay(UpdateCheck.OPEN_APP_INTERVAL_MS)
+                        }
                     }
                     update?.let { u ->
                         UpdateDialog(u, onUpdate = { UpdateCheck.openDownload(this@MainActivity, u.apkUrl) },
-                            onLater = { update = null })
+                            onLater = { laterFor = u.versionCode; update = null })
                     }
                     // Notification deep link → Report screen.
                     val openId = pendingOpenRecordingId.value
