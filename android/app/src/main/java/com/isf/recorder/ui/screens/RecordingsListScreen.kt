@@ -64,7 +64,9 @@ fun RecordingsListScreen(
     suspend fun fetch(page: Int) = api.listRecordings(
         page = page,
         limit = 50,
-        userId = if (isAdmin) person?.userId else null,
+        // the person's account AND their name / assistant-coach entries (21 Oct)
+        coach = if (isAdmin) person?.name else null,
+        coachUserId = if (isAdmin) person?.userId else null,
         dateFrom = dateFilter.fromParam,
         dateTo = dateFilter.toParam
     )

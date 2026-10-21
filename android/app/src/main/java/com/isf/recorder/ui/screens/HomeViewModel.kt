@@ -163,9 +163,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearFilters() = setFilters(null, null, com.isf.recorder.ui.components.DateFilter.ALL)
 
-    /** Admins see every coach's recordings (optionally one coach); coaches only their own. */
-    private fun listUserId(): String? = if (prefs.isAdmin) fPerson?.userId else prefs.userId
+    /**
+     * Admins see every coach's recordings; the Coach filter (21 Oct) shows everything that coach was part of:
+     * made from their account, recorded under their name, or picked as an assistant coach. Coaches: only their own.
+     */
+    private fun listUserId(): String? = if (prefs.isAdmin) null else prefs.userId
     private fun listAssistantCoach(): String? = if (prefs.isAdmin) null else fPerson?.name
+    private fun listCoach(): String? = if (prefs.isAdmin) fPerson?.name else null
+    private fun listCoachUserId(): String? = if (prefs.isAdmin) fPerson?.userId else null
 
     fun changeAllDate(f: com.isf.recorder.ui.components.DateFilter) = setFilters(date = f)
 
@@ -177,7 +182,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         allLoading = true
         viewModelScope.launch {
             val res = api.listRecordings(page = page, limit = 20, userId = listUserId(), dateFrom = allDate.fromParam,
-                dateTo = allDate.toParam, mode = listMode, balgruh = fBalgruh, assistantCoach = listAssistantCoach())
+                dateTo = allDate.toParam, mode = listMode, balgruh = fBalgruh, assistantCoach = listAssistantCoach(),
+                coach = listCoach(), coachUserId = listCoachUserId())
             allLoading = false
             res.onSuccess { data ->
                 @Suppress("UNCHECKED_CAST")
@@ -236,7 +242,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         recentLoading = recent.isEmpty()
         viewModelScope.launch {
             val res = api.listRecordings(page = 1, limit = RECENT_COUNT, userId = listUserId(), mode = listMode,
-                dateFrom = allDate.fromParam, dateTo = allDate.toParam, balgruh = fBalgruh, assistantCoach = listAssistantCoach())
+                dateFrom = allDate.fromParam, dateTo = allDate.toParam, balgruh = fBalgruh, assistantCoach = listAssistantCoach(),
+                coach = listCoach(), coachUserId = listCoachUserId())
             recentLoading = false
             res.onSuccess { data ->
                 @Suppress("UNCHECKED_CAST")

@@ -398,7 +398,9 @@ class ISFApiClient(context: Context) {
         dateTo: String? = null,
         mode: String? = null,
         balgruh: String? = null,
-        assistantCoach: String? = null
+        assistantCoach: String? = null,
+        coach: String? = null,          // admins: everything this coach was part of (made, or assistant coach)
+        coachUserId: String? = null     // with [coach]: that coach's account
     ): Result<Map<String, Any?>> = withContext(Dispatchers.IO) {
         try {
             var url = "${prefs.serverUrl}/recordings/?starred_only=$starredOnly&page=$page&limit=$limit"
@@ -410,6 +412,10 @@ class ISFApiClient(context: Context) {
             if (!mode.isNullOrBlank()) url += "&mode=$mode"
             if (!balgruh.isNullOrBlank()) url += "&balgruh=" + java.net.URLEncoder.encode(balgruh, "UTF-8")
             if (!assistantCoach.isNullOrBlank()) url += "&assistant_coach=" + java.net.URLEncoder.encode(assistantCoach, "UTF-8")
+            if (!coach.isNullOrBlank()) {
+                url += "&coach=" + java.net.URLEncoder.encode(coach, "UTF-8")
+                if (!coachUserId.isNullOrBlank()) url += "&coach_user_id=$coachUserId"
+            }
             val request = buildRequest(url).get().build()
             val response = okHttpClient.newCall(request).execute()
             val body = response.body?.string() ?: ""
