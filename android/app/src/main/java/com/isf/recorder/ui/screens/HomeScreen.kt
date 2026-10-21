@@ -972,7 +972,8 @@ fun formatDuration(totalSec: Int): String {
  */
 @Composable
 private fun RecordingFilters(vm: HomeViewModel, cfg: RecorderConfig, isAdmin: Boolean, schedule: Boolean) {
-    val people = cfg.coaches   // admins too: coaches without a linked account are found by name (21 Oct)
+    // admins: Coach = who RECORDED the session, so only people with a Jomi login (they are the ones who record)
+    val people = if (isAdmin) cfg.coaches.filter { it.userId != null } else cfg.coaches
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         if (schedule) {
             FilterChipMenu("Balgruha", vm.fBalgruh, cfg.balgruhs.map { it.name }, { vm.setFilters(balgruh = it) },

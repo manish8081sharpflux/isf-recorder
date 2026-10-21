@@ -164,8 +164,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun clearFilters() = setFilters(null, null, com.isf.recorder.ui.components.DateFilter.ALL)
 
     /**
-     * Admins see every coach's recordings; the Coach filter (21 Oct) shows everything that coach was part of:
-     * made from their account, recorded under their name, or picked as an assistant coach. Coaches: only their own.
+     * Admins see every coach's recordings; the Coach filter shows ONLY the sessions that coach recorded (from their
+     * account, or under their name) — not those where they were an assistant coach. Coaches: only their own.
      */
     private fun listUserId(): String? = if (prefs.isAdmin) null else prefs.userId
     private fun listAssistantCoach(): String? = if (prefs.isAdmin) null else fPerson?.name

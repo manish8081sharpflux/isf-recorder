@@ -1,4 +1,4 @@
-"""Admin "Coach" filter (21 Oct): everything the coach was part of, not only recordings made from their account."""
+"""Admin "Coach" filter: ONLY the sessions the coach recorded (also under their name); assistant-coach sessions do not count."""
 import uuid
 
 from sqlalchemy import text
@@ -26,7 +26,7 @@ def _ids(client, headers, **q):
     return {i["id"] for i in r.json()["items"]}, r.json()["total"]
 
 
-def test_coach_filter_finds_everything_the_coach_was_part_of(client, admin):
+def test_coach_filter_shows_only_sessions_the_coach_recorded(client, admin):
     name = f"Asmita {uuid.uuid4().hex[:4]}"
     asmita = make_user("staff", name=name)
     twin = make_user("staff", name=name)          # a second account with the same name (wrong link in the coach list)
@@ -39,7 +39,8 @@ def test_coach_filter_finds_everything_the_coach_was_part_of(client, admin):
         unrelated = _rec(sanket, coaches_json='[{"user_id": null, "name": "Archana"}]')
 
         got, total = _ids(client, admin["headers"], coach=name, coach_user_id=asmita["id"])
-        assert {own, as_assistant, old_row, other_account} <= got
+        assert {own, other_account} <= got                                  # recorded by her (any of her accounts)
+        assert as_assistant not in got and old_row not in got                 # only present as assistant coach
         assert unrelated not in got and total == len(got)
 
         # the old behaviour (account only) is still there for anything that sends user_id

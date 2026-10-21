@@ -627,7 +627,7 @@ def list_recordings(
     mode: Optional[str] = Query(None, description="schedule | meeting"),
     balgruh: Optional[str] = Query(None, description="exact Balgruha name"),
     assistant_coach: Optional[str] = Query(None, description="name of one of the assistant coaches"),
-    coach: Optional[str] = Query(None, description="admins: a coach's name - recordings they made OR were an assistant coach in"),
+    coach: Optional[str] = Query(None, description="admins: a coach's name - only the recordings that coach recorded"),
     coach_user_id: Optional[str] = Query(None, description="admins, with coach: that coach's account (recordings made from it)"),
     source: str = Query("recording", description="recording (classes/meetings) | call (phone calls, private)"),
     contact: Optional[str] = Query(None, description="calls: exact contact name"),
@@ -701,14 +701,11 @@ def list_recordings(
         where_clauses.append("r.balgruh_name = :balgruh")
         params["balgruh"] = balgruh.strip()
     if coach and is_admin:
-        # Admin "Coach" filter (21 Oct): everything the coach was part of - made from their account, recorded under
-        # their name (also when the coach list links a different account), or picked as an assistant coach.
+        # Admin "Coach" filter: ONLY the sessions that coach recorded (user decision, 21 Oct) — made from their account,
+        # or recorded under their name (when the name is linked to another account). Being an assistant coach does not count.
         where_clauses.append("""(
             (CAST(:coach_uid AS text) IS NOT NULL AND r.user_id::text = CAST(:coach_uid AS text))
             OR LOWER(TRIM(COALESCE(u.name, r.recorded_by_name, ''))) = LOWER(TRIM(:coach))
-            OR (jsonb_typeof(r.assistant_coaches) = 'array' AND EXISTS (
-                SELECT 1 FROM jsonb_array_elements(r.assistant_coaches) e WHERE LOWER(TRIM(e->>'name')) = LOWER(TRIM(:coach))))
-            OR (',' || LOWER(REPLACE(COALESCE(r.assistant_coach, ''), ', ', ',')) || ',') LIKE ('%,' || LOWER(TRIM(:coach)) || ',%')
         )""")
         params["coach"] = coach.strip()
         params["coach_uid"] = (coach_user_id or "").strip() or None

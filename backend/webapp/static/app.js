@@ -245,7 +245,8 @@
     const f = state.filters;
     const opts = (list, sel, all) => '<option value="">' + all + "</option>" + list.map((o) =>
       '<option value="' + esc(o.v) + '"' + (o.v === sel ? " selected" : "") + ">" + esc(o.l) + "</option>").join("");
-    const coachList = (cfg.coaches || []).map((c) => ({ v: c.name + "\u0001" + (c.user_id || ""), l: c.name }));
+    // admins: Coach = who RECORDED the session → only people with a login; coaches: their assistant coaches
+    const coachList = (cfg.coaches || []).filter((c) => !isAdmin() || c.user_id).map((c) => ({ v: c.name + "\u0001" + (c.user_id || ""), l: c.name }));
     const html =
       '<div class="tabs">' + (cfg.modes || ["schedule", "meeting"]).map((m) =>
         '<button data-mode="' + m + '" class="' + (m === f.mode ? "on" : "") + '">' + esc(modeLabel(m)) + "</button>").join("") + "</div>" +
