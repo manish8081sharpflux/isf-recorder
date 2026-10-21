@@ -186,7 +186,7 @@ fun SettingsScreen(
         apiClient.listUsers().onSuccess { teamSummary = "${it.size} people" }
         val b = apiClient.listListItems("balgruh", includeInactive = false).getOrNull()?.size
         val c = apiClient.listListItems("coach_name", includeInactive = false).getOrNull()?.size
-        if (b != null) listsSummary = "$b Balgruh · ${c ?: 0} names"
+        if (b != null) listsSummary = "$b Balgruha · ${c ?: 0} names"
         apiClient.getRecorderConfig().onSuccess { cfg ->
             val t = cfg["report_templates"] as? Map<*, *>
             fun title(k: String) = ((t?.get(k) as? Map<*, *>)?.get("title")?.toString() ?: "—")

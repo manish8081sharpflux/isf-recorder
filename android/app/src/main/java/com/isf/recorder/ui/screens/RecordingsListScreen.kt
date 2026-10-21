@@ -57,6 +57,7 @@ fun RecordingsListScreen(
     var editTarget by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var reportFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var povFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var expandedId by remember { mutableStateOf<String?>(null) }   // the one open recording card
     var mergeRunning by remember { mutableStateOf(false) }
 
     suspend fun fetch(page: Int) = api.listRecordings(
@@ -163,7 +164,10 @@ fun RecordingsListScreen(
                                 onToggleSelect = { selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id },
                                 onLongPress = { selectedIds = selectedIds + id },
                                 // Director's POV: admins only (not while a super admin views as Coach), never calls
-                                onDirectorPov = if (isAdmin && rec["source"]?.toString() != "call") ({ povFor = rec }) else null
+                                onDirectorPov = if (isAdmin && rec["source"]?.toString() != "call") ({ povFor = rec }) else null,
+                                // Collapsed by default; one card open at a time
+                                expanded = expandedId == id,
+                                onToggleExpand = { expandedId = if (expandedId == id) null else id }
                             )
                         }
                         if (recordings.size < totalCount) {

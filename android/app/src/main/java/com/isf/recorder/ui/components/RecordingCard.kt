@@ -2,9 +2,15 @@ package com.isf.recorder.ui.components
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,9 +25,10 @@ import com.isf.recorder.ui.theme.*
 
 /**
  * One recording in Home "Previous recordings" and See all.
- * Line 1: "6 Oct 2026 · Meeting" + status pill. Title. ONE line "Recording time · 34 min … Cost ₹x"
- * (maxLines = 1 — fixes the old card whose duration wrapped vertically). Then Report / AI Chat /
- * edit / delete and Copy / Share.
+ * Collapsed (21 Oct, when [onToggleExpand] is given): date · mode + status pill, title, and ONE line
+ * "🎙️ owner · duration" with ⌄. Expanded: also Balgruha / coaches, silence skipped, cost, Report (+ Director's POV
+ * for admins) / AI Chat / edit / delete and Copy / Share. Tapping the card still plays it; only ⌄ / ⌃ opens it.
+ * Without [onToggleExpand] the card is always open.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -41,7 +48,9 @@ fun RecordingCard(
     onToggleSelect: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,   // long-press starts merge/delete selection
     highlighted: Boolean = false,        // currently loaded in the Home player
-    onDirectorPov: (() -> Unit)? = null  // admins only: "🎬 Director's POV" next to Report
+    onDirectorPov: (() -> Unit)? = null, // admins only: "🎬 Director's POV" next to Report
+    expanded: Boolean = true,
+    onToggleExpand: (() -> Unit)? = null // given → the card can collapse (⌄ / ⌃)
 ) {
     val status = rec["status"]?.toString()
     val reportStatus = rec["report_status"]?.toString()
@@ -50,6 +59,7 @@ fun RecordingCard(
     val dateText = recordingDate(rec)
     val cost = rec["estimated_cost_formatted"]?.toString()?.takeIf { it.isNotBlank() } ?: "₹—"
     val owner = rec["user_name"]?.toString()?.takeIf { it.isNotBlank() } ?: rec["recorded_by_name"]?.toString()
+    val open = onToggleExpand == null || expanded
 
     JomiCard(
         modifier = modifier.combinedClickable(
@@ -88,65 +98,91 @@ fun RecordingCard(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        recordingPeopleLine(rec)?.let { people ->
-            Text(people, color = JomiTextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        silenceSkippedLine(rec)?.let { Text(it, color = JomiTextMuted, fontSize = 12.sp, maxLines = 1) }
-        if (showOwner && !owner.isNullOrBlank()) {
-            Text("🎙️ Recorded by $owner", color = JomiTeal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Spacer(Modifier.height(8.dp))
-        // ONE line: never wraps vertically.
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "Recording time · ${recordingDurationText(rec)}",
-                color = JomiTextMuted,
-                fontSize = 12.sp,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Cost · $cost",
-                color = JomiTextMuted,
-                fontSize = 12.sp,
-                maxLines = 1,
-                softWrap = false
-            )
+
+        if (onToggleExpand != null) {
+            // Summary line, always shown: who recorded it (admins) and how long, with the open / close arrow
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = listOfNotNull(owner?.takeIf { showOwner && it.isNotBlank() }?.let { "🎙️ $it" },
+                        recordingDurationText(rec)).joinToString(" · "),
+                    color = if (showOwner) JomiTeal else JomiTextMuted,
+                    fontSize = 13.sp,
+                    fontWeight = if (showOwner) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onToggleExpand, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Show less" else "Show more",
+                        tint = JomiTeal
+                    )
+                }
+            }
         }
 
-        if (!selectionMode) {
-            Spacer(Modifier.height(12.dp))
-            if (onDirectorPov != null) {
-                // Admins: Report and Director's POV side by side (one tap each); AI Chat moves to the next row
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionChipButton("Report", R.drawable.ic_report, onReport, modifier = Modifier.weight(1f))
-                    ActionChipButton("🎬 Director's POV", null, onDirectorPov, modifier = Modifier.weight(1f))
+        AnimatedVisibility(visible = open, enter = expandVertically(), exit = shrinkVertically()) {
+            Column {
+                recordingPeopleLine(rec)?.let { people ->
+                    Text(people, color = JomiTextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(Modifier.height(8.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (onDirectorPov == null) ActionChipButton("Report", R.drawable.ic_report, onReport)
-                ActionChipButton(
-                    "AI Chat", R.drawable.ic_chat, onChat,
-                    tint = MaterialTheme.colorScheme.onBackground, container = JomiCard, border = JomiBorder
-                )
-                Spacer(Modifier.weight(1f))
-                if (onEditTitle != null) {
-                    SmallIconButton(R.drawable.ic_edit, "Edit title", onEditTitle, tint = JomiGreen, background = JomiMint)
+                silenceSkippedLine(rec)?.let { Text(it, color = JomiTextMuted, fontSize = 12.sp, maxLines = 1) }
+                if (onToggleExpand == null) {
+                    if (showOwner && !owner.isNullOrBlank()) {
+                        Text("🎙️ Recorded by $owner", color = JomiTeal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // ONE line: never wraps vertically.
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Recording time · ${recordingDurationText(rec)}",
+                            color = JomiTextMuted,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = "Cost · $cost", color = JomiTextMuted, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                    }
+                } else {
+                    Text("Cost · $cost", color = JomiTextMuted, fontSize = 12.sp, maxLines = 1)
                 }
-                if (onDelete != null) {
-                    SmallIconButton(R.drawable.ic_delete, "Erase recording", onDelete)
+
+                if (!selectionMode) {
+                    Spacer(Modifier.height(12.dp))
+                    if (onDirectorPov != null) {
+                        // Admins: Report and Director's POV side by side (one tap each); AI Chat moves to the next row
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ActionChipButton("Report", R.drawable.ic_report, onReport, modifier = Modifier.weight(1f))
+                            ActionChipButton("🎬 Director's POV", null, onDirectorPov, modifier = Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (onDirectorPov == null) ActionChipButton("Report", R.drawable.ic_report, onReport)
+                        ActionChipButton(
+                            "AI Chat", R.drawable.ic_chat, onChat,
+                            tint = MaterialTheme.colorScheme.onBackground, container = JomiCard, border = JomiBorder
+                        )
+                        Spacer(Modifier.weight(1f))
+                        if (onEditTitle != null) {
+                            SmallIconButton(R.drawable.ic_edit, "Edit title", onEditTitle, tint = JomiGreen, background = JomiMint)
+                        }
+                        if (onDelete != null) {
+                            SmallIconButton(R.drawable.ic_delete, "Erase recording", onDelete)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(color = JomiBorder)
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ActionChipButton("Copy", R.drawable.ic_copy, onCopy, modifier = Modifier.weight(1f))
+                        ActionChipButton("Share", R.drawable.ic_share, onShare, modifier = Modifier.weight(1f))
+                    }
                 }
-            }
-            Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = JomiBorder)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ActionChipButton("Copy", R.drawable.ic_copy, onCopy, modifier = Modifier.weight(1f))
-                ActionChipButton("Share", R.drawable.ic_share, onShare, modifier = Modifier.weight(1f))
             }
         }
     }

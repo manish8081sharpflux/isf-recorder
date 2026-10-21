@@ -112,6 +112,8 @@ fun HomeScreen(
     }
 
     var reportFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var povFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var expandedId by remember { mutableStateOf<String?>(null) }   // the one open recording card
     var callsRefresh by remember { mutableStateOf(0) }   // reload Calls after a call popup closes
     var editTarget by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var eraseTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
@@ -203,7 +205,12 @@ fun HomeScreen(
             selectionMode = selectionMode,
             selected = id in selectedIds,
             onToggleSelect = { toggleSelect(id) },
-            onLongPress = { toggleSelect(id) }
+            onLongPress = { toggleSelect(id) },
+            // Director's POV: admins only (not while a super admin views as Coach), never calls
+            onDirectorPov = if (isAdmin && rec["source"]?.toString() != "call") ({ povFor = rec }) else null,
+            // Collapsed by default; one card open at a time
+            expanded = expandedId == id,
+            onToggleExpand = { expandedId = if (expandedId == id) null else id }
         )
     }
 
@@ -433,6 +440,9 @@ fun HomeScreen(
             onOpenFull = if (isAdmin) ({ reportFor = null; onOpenFullReport(id) }) else null,
             onOpenTranscript = { reportFor = null; onOpenTranscript(id) }
         )
+    }
+    povFor?.let { rec ->
+        if (isAdmin) DirectorPovSheet(recordingId = rec["id"]?.toString().orEmpty(), title = cleanTitle(rec), onDismiss = { povFor = null })
     }
     editTarget?.let { rec ->
         EditTitleDialog(
@@ -761,7 +771,7 @@ private fun RecordingFilters(vm: HomeViewModel, cfg: RecorderConfig, isAdmin: Bo
     val people = if (isAdmin) cfg.coaches.filter { it.userId != null } else cfg.coaches
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         if (schedule) {
-            FilterChipMenu("Balgruh", vm.fBalgruh, cfg.balgruhs.map { it.name }, { vm.setFilters(balgruh = it) },
+            FilterChipMenu("Balgruha", vm.fBalgruh, cfg.balgruhs.map { it.name }, { vm.setFilters(balgruh = it) },
                 modifier = Modifier.weight(1f))
         }
         if (isAdmin || schedule) {

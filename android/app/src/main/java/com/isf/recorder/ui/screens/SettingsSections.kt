@@ -418,7 +418,7 @@ fun ListsSection(api: ISFApiClient, roleLabel: String) {
         SectionTitle("Lists", "Names shown in the recording dropdowns")
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Balgruh") },
+            FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Balgruha") },
                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JomiMint, selectedLabelColor = JomiTeal))
             FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("$roleLabel names") },
                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JomiMint, selectedLabelColor = JomiTeal))
@@ -890,7 +890,7 @@ private fun SettingsMenuPreview() {
             SettingsSection("👤", "Profile", "Rizwana Shaikh · Super admin", open = false, onToggle = {})
             SettingsSection("💬", "Ask Jomi", "Saved conversations", open = false, onToggle = {}, navigates = true)
             SettingsSection("👥", "Team", "16 people", open = false, onToggle = {})
-            SettingsSection("📋", "Lists", "15 Balgruh · 8 names", open = true, onToggle = {}) {
+            SettingsSection("📋", "Lists", "15 Balgruha · 8 names", open = true, onToggle = {}) {
                 Text("…section content…", color = JomiTextMuted)
             }
             SettingsSection("📝", "Reports", "Coach / Meeting minutes", open = false, onToggle = {})

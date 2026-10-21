@@ -249,7 +249,7 @@ fun reportDetailsLines(rec: Map<String, Any?>?): List<String> {
     val lines = mutableListOf<String>()
     listOfNotNull(recordingDate(rec).takeIf { it.isNotBlank() }, modeLabel(rec["mode"]))
         .joinToString(" · ").takeIf { it.isNotBlank() }?.let { lines += "📅 $it" }
-    clean(rec["balgruh_name"])?.let { lines += "🏠 Balgruh: $it" }
+    clean(rec["balgruh_name"])?.let { lines += "🏠 Balgruha: $it" }
     (clean(rec["user_name"]) ?: clean(rec["recorded_by_name"]) ?: clean(rec["recorded_by"]))?.let { lines += "🎙️ Recorded by: $it" }
     if (rec["mode"]?.toString() == "meeting") {
         namesOf(rec["participants"]).takeIf { it.isNotEmpty() }?.let { lines += "👥 Participants: " + it.joinToString(", ") }
