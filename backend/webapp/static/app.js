@@ -161,7 +161,15 @@
     const initials = (u.name || "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
     return '<header class="top"><div class="top-in"><div class="avatar">' + esc(initials) + '</div><div class="who"><b>' + esc(u.name || "") +
       '</b><span class="pill">' + esc((u.org_name || "ISF") + " · " + (isAdmin() ? "ADMIN" : "COACH")) + "</span></div>" +
-      '<button id="logout">Log out</button></div></header><main>' + inner + "</main>";
+      '<button id="logout">Log out</button></div><nav class="nav">' +
+      [["#/", "Recordings"], ["#/chat", "Ask Jomi"], ["#/settings", "Settings"]].map(([h, l]) =>
+        '<a href="' + h + '" class="' + (navOn(h) ? "on" : "") + '">' + l + "</a>").join("") + "</nav></header><main>" + inner + "</main>";
+  }
+  function navOn(h) {
+    const cur = location.hash || "#/";
+    if (h === "#/") return cur === "#/" || cur.startsWith("#/r/");
+    if (h === "#/chat") return cur.startsWith("#/chat") || cur.startsWith("#/c/");
+    return cur.startsWith(h);
   }
   function bindShell() { const b = document.getElementById("logout"); if (b) b.onclick = logout; }
 
@@ -291,7 +299,7 @@
     try { rec = await api("GET", "/recordings/" + encodeURIComponent(id)); }
     catch (e) { $app.innerHTML = shell('<button class="linkbtn back" id="back">← Previous recordings</button><div class="card err">' + esc(e.message) + "</div>"); bindShell(); document.getElementById("back").onclick = () => history.back(); return; }
     const isCall = rec.source === "call";
-    const tabs = [["report", isCall ? "Summary" : "Report"], ["transcript", "Transcript"]];
+    const tabs = [["report", isCall ? "Summary" : "Report"], ["transcript", "Transcript"], ["chat", "💬 AI chat"]];
     if (isAdmin() && !isCall) tabs.push(["pov", "🎬 Director's POV"]);
     const details = [
       [fmtDate(rec.started_at || rec.created_at), modeLabel(rec.mode)].filter(Boolean).join(" · "),
@@ -314,6 +322,7 @@
       document.querySelectorAll("[data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === k));
       if (k === "report") showReport(id, rec, details);
       else if (k === "transcript") showTranscript(rec);
+      else if (k === "chat") showRecordingChat(id);
       else showPov(id, rec);
     };
     document.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => show(b.dataset.tab));
@@ -444,15 +453,334 @@
     } catch (e) { $t.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; }
   }
 
+
+  // ── Phase 2: AI chat ──────────────────────────────────────────────────────
+  let templatesCache = null;
+  async function chatTemplates() {
+    if (!templatesCache) templatesCache = await api("GET", "/chat/templates");
+    return templatesCache;
+  }
+
+  /** A conversation inside [$box]: messages, input, templates. */
+  async function mountChat($box, convId) {
+    $box.innerHTML = '<span class="spinner"></span>Loading…';
+    let data;
+    try { data = await api("GET", "/chat/conversations/" + convId + "/messages"); }
+    catch (e) { $box.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; return; }
+    const msgs = data.messages || [];
+    $box.innerHTML = '<div class="chat" id="msgs"></div>' +
+      '<div class="chat-in"><button class="btn plain" id="tpl" title="Templates">⚡ Templates</button>' +
+      '<textarea id="q" rows="2" placeholder="Ask anything…"></textarea><button class="btn primary" id="send">Send</button></div>' +
+      '<div id="tpl-list" class="tpl-list" hidden></div>';
+    const $m = document.getElementById("msgs");
+    const bubble = (m) => '<div class="msg ' + (m.role === "user" ? "me" : "ai") + '">' +
+      (m.role === "user" ? esc(m.content) : '<div class="md">' + markdown(m.content) + "</div>" +
+        '<button class="linkbtn small" data-copy="1">Copy</button>') + "</div>";
+    const draw = () => {
+      $m.innerHTML = msgs.length ? msgs.map(bubble).join("") : '<p class="muted">No messages yet. Ask a question or pick a template.</p>';
+      $m.querySelectorAll("[data-copy]").forEach((b, i) => {
+        const ai = msgs.filter((x) => x.role !== "user");
+        b.onclick = () => copyText(ai[i].content, "Answer copied");
+      });
+      $m.scrollTop = $m.scrollHeight;
+    };
+    draw();
+    const send = async (message, templateId) => {
+      if (!message && !templateId) return;
+      msgs.push({ role: "user", content: message || "⚡ Template" });
+      msgs.push({ role: "assistant", content: "…" });
+      draw();
+      const btn = document.getElementById("send"); btn.disabled = true;
+      try {
+        const r = await api("POST", "/chat/conversations/" + convId + "/message", { message: message || "", template_id: templateId || null });
+        msgs[msgs.length - 1] = r;
+      } catch (e) { msgs[msgs.length - 1] = { role: "assistant", content: "⚠️ " + e.message }; }
+      btn.disabled = false; draw();
+    };
+    const $q = document.getElementById("q");
+    document.getElementById("send").onclick = () => { const v = $q.value.trim(); $q.value = ""; send(v); };
+    $q.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("send").click(); } };
+    document.getElementById("tpl").onclick = async () => {
+      const $l = document.getElementById("tpl-list");
+      if (!$l.hidden) { $l.hidden = true; return; }
+      try {
+        const t = await chatTemplates();
+        $l.innerHTML = t.map((x) => '<button class="btn plain" data-t="' + esc(x.id) + '">' + esc((x.icon || "📋") + " " + x.title) + "</button>").join("");
+        $l.hidden = false;
+        $l.querySelectorAll("[data-t]").forEach((b) => b.onclick = () => { $l.hidden = true; send("", b.dataset.t); });
+      } catch (e) { toast(e.message); }
+    };
+  }
+
+  async function showRecordingChat(id) {
+    const $t = document.getElementById("tab");
+    $t.innerHTML = '<span class="spinner"></span>Loading…';
+    try {
+      const list = await api("GET", "/chat/conversations?mode=session&recording_id=" + encodeURIComponent(id));
+      const conv = (list.items || [])[0] || await api("POST", "/chat/conversations", { mode: "session", recording_id: id });
+      mountChat($t, conv.id);
+    } catch (e) { $t.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; }
+  }
+
+  async function renderAskJomi() {
+    $app.innerHTML = shell('<div class="row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<h2 style="margin:0">Ask Jomi</h2><button class="btn primary" id="new">＋ New chat</button></div><div id="convs" class="card"></div>');
+    bindShell();
+    document.getElementById("new").onclick = async () => {
+      try { const c = await api("POST", "/chat/conversations", { mode: "all_sessions" }); location.hash = "#/c/" + c.id; }
+      catch (e) { toast(e.message); }
+    };
+    const $c = document.getElementById("convs");
+    $c.innerHTML = '<span class="spinner"></span>Loading…';
+    try {
+      const r = await api("GET", "/chat/conversations");
+      const items = r.items || [];
+      $c.innerHTML = items.length ? items.map((c) =>
+        '<div class="conv" data-id="' + esc(c.id) + '"><div class="conv-main"><b>' + esc(c.title || "New chat") + "</b>" +
+        '<div class="small muted">' + esc([c.mode === "session" ? "🎙️ " + (c.recording_title || "One recording") : "All recordings",
+          c.message_count + " message" + (c.message_count === 1 ? "" : "s"), fmtDate(c.updated_at)].join(" · ")) + "</div>" +
+        (c.last_message ? '<div class="small muted ellipsis">' + esc(c.last_message) + "</div>" : "") + "</div>" +
+        '<button class="linkbtn small" data-rename="1">Rename</button><button class="linkbtn small danger-text" data-del="1">Delete</button></div>').join("")
+        : '<p class="muted">No conversations yet. Ask about your sessions, children\'s progress, or anything recorded.</p>';
+      $c.querySelectorAll(".conv").forEach((el) => {
+        const id = el.dataset.id;
+        el.querySelector(".conv-main").onclick = () => { location.hash = "#/c/" + id; };
+        el.querySelector("[data-rename]").onclick = async () => {
+          const t = prompt("New name for this conversation"); if (!t) return;
+          try { await api("PATCH", "/chat/conversations/" + id, { title: t }); renderAskJomi(); } catch (e) { toast(e.message); }
+        };
+        el.querySelector("[data-del]").onclick = async () => {
+          if (!confirm("Delete this conversation and all its messages? Recordings and reports are not affected.")) return;
+          try { await api("DELETE", "/chat/conversations/" + id); renderAskJomi(); } catch (e) { toast(e.message); }
+        };
+      });
+    } catch (e) { $c.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; }
+  }
+
+  async function renderConversation(id) {
+    $app.innerHTML = shell('<button class="linkbtn back" id="back">← Ask Jomi</button><div class="card" id="chatbox"></div>');
+    bindShell();
+    document.getElementById("back").onclick = () => { location.hash = "#/chat"; };
+    mountChat(document.getElementById("chatbox"), id);
+  }
+
+  // ── Phase 3: Settings ─────────────────────────────────────────────────────
+  async function renderSettings() {
+    const sections = [["notify", "🔔 Notifications"]];
+    if (isAdmin()) sections.push(["team", "👥 Team"], ["lists", "🏠 Balgruha"], ["names", "🔤 Learned names"],
+      ["reports", "📝 Report templates"], ["templates", "🗂 AI chat templates"]);
+    const cur = sessionStorage.getItem("jomi_web_settings") || "notify";
+    $app.innerHTML = shell('<h2 style="margin:0 0 10px">Settings</h2><div class="subtabs">' + sections.map(([k, l]) =>
+      '<button data-sec="' + k + '" class="' + (k === cur ? "on" : "") + '">' + l + "</button>").join("") + '</div><div id="sec" class="card"></div>');
+    bindShell();
+    const open = (k) => {
+      try { sessionStorage.setItem("jomi_web_settings", k); } catch (e) {}
+      document.querySelectorAll("[data-sec]").forEach((b) => b.classList.toggle("on", b.dataset.sec === k));
+      const $s = document.getElementById("sec");
+      $s.innerHTML = '<span class="spinner"></span>Loading…';
+      ({ notify: secNotify, team: secTeam, lists: secLists, names: secNames, reports: secReports, templates: secTemplates }[k] || secNotify)($s);
+    };
+    document.querySelectorAll("[data-sec]").forEach((b) => b.onclick = () => open(b.dataset.sec));
+    open(sections.some(([k]) => k === cur) ? cur : "notify");
+  }
+
+  async function secNotify($s) {
+    try {
+      const r = await api("GET", "/notifications/settings");
+      $s.innerHTML = '<p class="small muted">Phone notifications from the Jomi app. Messages from admins always arrive.</p>' +
+        (r.items || []).map((i) => '<label class="switch-row"><span>' + esc(i.label) + '</span><input type="checkbox" data-k="' + esc(i.kind) + '"' +
+          (i.on ? " checked" : "") + "></label>").join("") +
+        (r.can_announce ? '<h3>📢 Send a message to the team</h3><textarea id="ann" rows="3" placeholder="e.g. Team meeting tomorrow at 4 PM"></textarea>' +
+          '<div class="actions"><select id="aud" style="max-width:200px"><option value="all">Everyone</option><option value="coaches">Coaches</option>' +
+          '<option value="admins">Admins</option></select><button class="btn primary" id="send-ann">Send</button></div>' : "");
+      $s.querySelectorAll("[data-k]").forEach((cb) => cb.onchange = async () => {
+        try { await api("PUT", "/notifications/settings", { prefs: { [cb.dataset.k]: cb.checked } }); toast("Saved"); }
+        catch (e) { toast(e.message); cb.checked = !cb.checked; }
+      });
+      const b = document.getElementById("send-ann");
+      if (b) b.onclick = async () => {
+        const msg = document.getElementById("ann").value.trim(), aud = document.getElementById("aud").value;
+        if (!msg) return toast("Write a message first");
+        if (!confirm("Send to " + aud + "?\n\n" + msg)) return;
+        try { const r2 = await api("POST", "/notifications/announce", { message: msg, audience: aud }); toast("Sent to " + r2.sent + " people"); document.getElementById("ann").value = ""; }
+        catch (e) { toast(e.message); }
+      };
+    } catch (e) { $s.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; }
+  }
+
+  async function secTeam($s) {
+    let showArchived = false;
+    const draw = async () => {
+      let r;
+      try { r = await api("GET", "/users/?include_archived=" + showArchived); } catch (e) { $s.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; return; }
+      const me = store.user || {};
+      const sup = !!me.is_super_admin;
+      $s.innerHTML = '<div class="actions"><input type="text" id="nu-name" placeholder="Name" style="max-width:220px">' +
+        '<input type="tel" id="nu-phone" placeholder="Mobile number" style="max-width:180px">' +
+        (sup ? '<select id="nu-role" style="max-width:140px"><option value="staff">Coach</option><option value="admin">Admin</option></select>' : "") +
+        '<button class="btn primary" id="nu-add">Add person</button></div>' +
+        '<label class="small"><input type="checkbox" id="arch"' + (showArchived ? " checked" : "") + '> Show archived</label>' +
+        '<table class="grid"><thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>Last seen</th><th></th></tr></thead><tbody>' +
+        (r.users || []).map((u) => '<tr data-id="' + esc(u.id) + '"' + (u.is_archived ? ' class="muted"' : "") + "><td>" + esc(u.name) +
+          (u.is_super_admin ? ' <span class="status">Super admin</span>' : "") + (u.is_archived ? ' <span class="status orange">Archived</span>' : "") +
+          "</td><td>" + esc(u.phone) + "</td><td>" +
+          (sup && !u.is_super_admin && !u.is_archived ? '<select data-role="1"><option value="staff"' + (u.role === "staff" ? " selected" : "") +
+            '>Coach</option><option value="admin"' + (u.role === "admin" ? " selected" : "") + ">Admin</option></select>" : esc(u.role === "admin" ? "Admin" : (u.role_label || "Coach"))) +
+          "</td><td class=\"small muted\">" + esc(fmtDate(u.last_seen_at)) + "</td><td class=\"nowrap\">" +
+          '<button class="linkbtn small" data-edit="1">Rename</button> ' +
+          (u.is_archived ? '<button class="linkbtn small" data-unarch="1">Restore</button>' :
+            (u.id !== me.user_id && u.id !== me.id ? '<button class="linkbtn small danger-text" data-archive="1">Archive</button>' : "")) +
+          "</td></tr>").join("") + "</tbody></table>";
+      document.getElementById("arch").onchange = (e) => { showArchived = e.target.checked; draw(); };
+      document.getElementById("nu-add").onclick = async () => {
+        const name = document.getElementById("nu-name").value.trim(), phone = document.getElementById("nu-phone").value.trim();
+        const roleSel = document.getElementById("nu-role");
+        if (!name || !phone) return toast("Name and mobile number are needed");
+        try { await api("POST", "/users/", { name, phone, role: roleSel ? roleSel.value : "staff" }); toast("Added"); draw(); } catch (e) { toast(e.message); }
+      };
+      $s.querySelectorAll("tr[data-id]").forEach((tr) => {
+        const id = tr.dataset.id;
+        const on = (sel, fn) => { const el = tr.querySelector(sel); if (el) el.onclick = fn; };
+        on("[data-edit]", async () => {
+          const n = prompt("New name"); if (!n) return;
+          try { await api("PUT", "/users/" + id, { name: n }); draw(); } catch (e) { toast(e.message); }
+        });
+        on("[data-archive]", async () => {
+          if (!confirm("Archive this person? They can no longer log in. Their recordings are kept.")) return;
+          try { await api("POST", "/users/" + id + "/archive"); draw(); } catch (e) { toast(e.message); }
+        });
+        on("[data-unarch]", async () => { try { await api("POST", "/users/" + id + "/unarchive"); draw(); } catch (e) { toast(e.message); } });
+        const rs = tr.querySelector("[data-role]");
+        if (rs) rs.onchange = async () => {
+          try { await api("PUT", "/users/" + id, { role: rs.value }); toast("Role changed"); } catch (e) { toast(e.message); draw(); }
+        };
+      });
+    };
+    draw();
+  }
+
+  async function secLists($s) {
+    const cfg = await ensureConfig().catch(() => ({ role_label: "Coach" }));
+    let type = "balgruh";
+    const draw = async () => {
+      let r;
+      try { r = await api("GET", "/settings/lists/" + type + "?include_inactive=true"); } catch (e) { $s.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; return; }
+      $s.innerHTML = '<div class="subtabs"><button data-type="balgruh" class="' + (type === "balgruh" ? "on" : "") + '">Balgruha</button>' +
+        '<button data-type="coach_name" class="' + (type === "coach_name" ? "on" : "") + '">' + esc(cfg.role_label || "Coach") + " names</button></div>" +
+        '<p class="small muted">' + (type === "balgruh" ? "Balgruha names shown in the recording dropdown. Add the area after a comma, e.g. “Vikas Anath Ashram, Chikhali”."
+          : "People without the app who can be picked as Assistant coach.") + "</p>" +
+        '<div class="actions"><input type="text" id="li-new" placeholder="Add a name" style="max-width:340px"><button class="btn primary" id="li-add">Add</button></div>' +
+        (r.items || []).map((i) => '<div class="li-row' + (i.is_active ? "" : " off") + '" data-id="' + esc(i.id) + '"><span>' + esc(i.name) + "</span><span>" +
+          '<button class="linkbtn small" data-ren="1">Rename</button> ' +
+          (i.is_active ? '<button class="linkbtn small danger-text" data-off="1">Hide</button>' : '<button class="linkbtn small" data-on="1">Show again</button>') +
+          "</span></div>").join("");
+      $s.querySelectorAll("[data-type]").forEach((b) => b.onclick = () => { type = b.dataset.type; draw(); });
+      document.getElementById("li-add").onclick = async () => {
+        const name = document.getElementById("li-new").value.trim(); if (!name) return;
+        try { await api("POST", "/settings/lists/" + type, { name }); state.config = null; draw(); } catch (e) { toast(e.message); }
+      };
+      $s.querySelectorAll(".li-row").forEach((row) => {
+        const id = row.dataset.id;
+        const on = (sel, fn) => { const el = row.querySelector(sel); if (el) el.onclick = fn; };
+        on("[data-ren]", async () => { const n = prompt("New name", row.firstChild.textContent); if (!n) return;
+          try { await api("PUT", "/settings/lists/" + type + "/" + id, { name: n }); state.config = null; draw(); } catch (e) { toast(e.message); } });
+        on("[data-off]", async () => { try { await api("DELETE", "/settings/lists/" + type + "/" + id); state.config = null; draw(); } catch (e) { toast(e.message); } });
+        on("[data-on]", async () => { try { await api("PUT", "/settings/lists/" + type + "/" + id, { is_active: true }); state.config = null; draw(); } catch (e) { toast(e.message); } });
+      });
+    };
+    draw();
+  }
+
+  async function secNames($s) {
+    const draw = async () => {
+      let r;
+      try { r = await api("GET", "/names"); } catch (e) { $s.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; return; }
+      const groups = {};
+      (r.items || []).forEach((n) => { (groups[n.balgruh || ""] = groups[n.balgruh || ""] || []).push(n); });
+      $s.innerHTML = '<p class="small muted">Jomi learns names by itself: from reports, and when someone corrects a name in a report. It uses them so the AI spells names right. Remove one only if it was learned by mistake.</p>' +
+        (Object.keys(groups).length ? Object.keys(groups).sort().map((g) => "<h3>" + esc(g || "Everywhere") + "</h3>" + groups[g].map((n) =>
+          '<div class="li-row" data-id="' + n.id + '"><span><b>' + esc(n.name) + '</b> <span class="small muted">' +
+          esc([(n.wrong_spellings || []).length ? "fixes: " + n.wrong_spellings.join(", ") : "", "heard in " + n.heard_count + " report" + (n.heard_count === 1 ? "" : "s")].filter(Boolean).join(" · ")) +
+          '</span></span><button class="linkbtn small danger-text" data-forget="1">Remove</button></div>').join("")).join("")
+          : '<p class="muted">Nothing learned yet. Names appear here after the next reports.</p>');
+      $s.querySelectorAll("[data-forget]").forEach((b) => b.onclick = async () => {
+        const id = b.closest(".li-row").dataset.id;
+        if (!confirm("Remove this name? Jomi stops using it and its corrections.")) return;
+        try { await api("DELETE", "/names/" + id); draw(); } catch (e) { toast(e.message); }
+      });
+    };
+    draw();
+  }
+
+  async function secReports($s) {
+    try {
+      const [cfg, tpls] = await Promise.all([api("GET", "/settings/recorder-config"), chatTemplates()]);
+      const cur = cfg.report_templates || {};
+      $s.innerHTML = '<p class="small muted">Which template writes the report for each kind of recording.</p>' +
+        (cfg.modes || []).map((m) => '<label class="switch-row"><span>' + esc(modeLabel(m)) + '</span><select data-mode="' + m + '" style="max-width:320px">' +
+          tpls.map((t) => '<option value="' + esc(t.id) + '"' + (cur[m] && cur[m].id === t.id ? " selected" : "") + ">" + esc(t.title) + "</option>").join("") +
+          "</select></label>").join("");
+      $s.querySelectorAll("select[data-mode]").forEach((sel) => sel.onchange = async () => {
+        try { await api("PUT", "/settings/recorder-config", { report_templates: { [sel.dataset.mode]: sel.value } }); state.config = null; toast("Saved"); }
+        catch (e) { toast(e.message); }
+      });
+    } catch (e) { $s.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; }
+  }
+
+  async function secTemplates($s) {
+    const draw = async () => {
+      templatesCache = null;
+      let tpls;
+      try { tpls = await chatTemplates(); } catch (e) { $s.innerHTML = '<p class="err">' + esc(e.message) + "</p>"; return; }
+      $s.innerHTML = '<p class="small muted">Templates for AI chat and reports. A template whose title contains “Director” is the Director\'s POV (admins only).</p>' +
+        '<div class="actions"><button class="btn primary" id="t-new">＋ New template</button></div>' +
+        tpls.map((t) => '<div class="li-row" data-id="' + esc(t.id) + '"><span>' + esc((t.icon || "📋") + " " + t.title) + "</span><span>" +
+          '<button class="linkbtn small" data-edit="1">Edit</button> <button class="linkbtn small danger-text" data-del="1">Delete</button></span></div>').join("") +
+        '<div id="t-form"></div>';
+      const form = (t) => {
+        document.getElementById("t-form").innerHTML = '<h3>' + (t ? "Edit template" : "New template") + '</h3><input type="text" id="t-title" placeholder="Title">' +
+          '<textarea id="t-prompt" rows="12" placeholder="Instructions for the AI" style="margin-top:8px"></textarea>' +
+          '<div class="actions"><button class="btn primary" id="t-save">Save</button><button class="btn plain" id="t-cancel">Cancel</button></div>';
+        document.getElementById("t-title").value = t ? t.title : "";
+        document.getElementById("t-prompt").value = t ? t.prompt : "";
+        document.getElementById("t-cancel").onclick = () => { document.getElementById("t-form").innerHTML = ""; };
+        document.getElementById("t-save").onclick = async () => {
+          const body = { title: document.getElementById("t-title").value.trim(), prompt: document.getElementById("t-prompt").value.trim() };
+          if (!body.title || !body.prompt) return toast("Title and instructions are needed");
+          try { t ? await api("PUT", "/chat/templates/" + t.id, body) : await api("POST", "/chat/templates", body); toast("Saved"); draw(); }
+          catch (e) { toast(e.message); }
+        };
+        document.getElementById("t-form").scrollIntoView({ behavior: "smooth" });
+      };
+      document.getElementById("t-new").onclick = () => form(null);
+      $s.querySelectorAll(".li-row").forEach((row) => {
+        const t = tpls.find((x) => x.id === row.dataset.id);
+        row.querySelector("[data-edit]").onclick = () => form(t);
+        row.querySelector("[data-del]").onclick = async () => {
+          if (!confirm("Delete the template “" + t.title + "”?")) return;
+          try { await api("DELETE", "/chat/templates/" + t.id); draw(); } catch (e) { toast(e.message); }
+        };
+      });
+    };
+    draw();
+  }
+
   // ── router ────────────────────────────────────────────────────────────────
   function render() {
     const h = location.hash || "#/";
     if (!store.token) { if (h !== "#/login") history.replaceState(null, "", "#/login"); renderLogin(); return; }
     const m = /^#\/r\/([0-9a-fA-F-]{36})$/.exec(h);
+    const c = /^#\/c\/([0-9a-fA-F-]{36})$/.exec(h);
     if (m) renderDetail(m[1]);
+    else if (c) renderConversation(c[1]);
+    else if (h === "#/chat") renderAskJomi();
+    else if (h === "#/settings") renderSettings();
     else { if (h !== "#/") history.replaceState(null, "", "#/"); renderList(); return; }
     window.scrollTo(0, 0);
   }
   window.addEventListener("hashchange", render);
-  render();
+  // keep name / role fresh (e.g. made admin since the last login), then draw
+  if (store.token) {
+    api("GET", "/auth/me").then((me) => { if (me && me.role) { store.user = Object.assign({}, store.user, me); } }).catch(() => {}).finally(render);
+  } else render();
 })();
