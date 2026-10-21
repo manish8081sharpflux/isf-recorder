@@ -168,8 +168,16 @@ fun HomeScreen(
     val selectionMode = selectedIds.isNotEmpty()
     // Phone Back on Home: first removes the long-press ticks, then closes "See all";
     // with nothing open, MainActivity's "Press Back again to exit" takes over.
-    androidx.activity.compose.BackHandler(enabled = selectionMode || vm.allExpanded) {
-        if (selectionMode) selectedIds = emptySet() else vm.allExpanded = false
+    // ...and after tapping a card (which jumps up to the player) Back first returns to that card.
+    val canReturnToCard by remember {
+        derivedStateOf { returnScroll != null && kotlin.math.abs(scrollState.value - (playerY() ?: 0)) < 300 }
+    }
+    androidx.activity.compose.BackHandler(enabled = selectionMode || canReturnToCard || vm.allExpanded) {
+        when {
+            selectionMode -> selectedIds = emptySet()
+            canReturnToCard -> backToCard()
+            else -> vm.allExpanded = false
+        }
     }
 
     // Notification deep link (coaches): load the recording and open its report popup.
