@@ -96,6 +96,7 @@ fun ReportSheet(
         Column(
             Modifier.fillMaxWidth()
                 .then(if (editMode) Modifier.fillMaxHeight().imePadding() else Modifier)
+                .navigationBarsPadding()   // Copy / Share stay above the phone's ◁ ○ ☰ buttons
                 .padding(horizontal = 16.dp).padding(bottom = if (editMode) 12.dp else 24.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

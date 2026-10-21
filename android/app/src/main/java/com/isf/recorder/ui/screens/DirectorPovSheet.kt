@@ -54,7 +54,7 @@ fun DirectorPovSheet(recordingId: String, title: String, onDismiss: () -> Unit) 
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
             Text("🎬 Director's POV", color = JomiTeal, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("Only admins can see this.", color = JomiTextMuted, fontSize = 12.sp)

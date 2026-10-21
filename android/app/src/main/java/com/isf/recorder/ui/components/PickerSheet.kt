@@ -112,7 +112,9 @@ fun PickerSheet(
         if (q.isEmpty()) options else options.filter { it.name.contains(q, ignoreCase = true) }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color.White) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        // imePadding: the sheet moves above the keyboard while searching (the list shrinks instead of hiding
+        // behind it); navigationBarsPadding: Done stays above the phone's ◁ ○ ☰ buttons (21 Oct)
+        Column(Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
                 IconButton(onClick = onDismiss) { Icon(painterResource(R.drawable.ic_close), "Close", tint = JomiTextMuted) }
@@ -129,7 +131,7 @@ fun PickerSheet(
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(10.dp))
-            LazyColumn(Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (shown.isEmpty()) item {
                     Text(if (options.isEmpty()) "No names yet — ask your admin" else "No match for \"$query\"",
                         color = JomiTextMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
@@ -169,7 +171,7 @@ fun PickerSheet(
                     Text("Done")
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
