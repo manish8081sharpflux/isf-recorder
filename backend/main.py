@@ -53,6 +53,7 @@ from backend.settings.recorder import router as recorder_settings_router
 from backend.calls.routes import router as calls_router
 from backend.assistant.routes import router as assistant_router
 from backend.reports.share import router as report_share_router
+from backend.notifications.inbox_routes import router as phone_notifications_router
 from backend.transcription.forex_sync import get_live_usd_to_inr_rate
 
 # Logging setup
@@ -149,6 +150,17 @@ async def lifespan(app: FastAPI):
         # 4. Live forex sync every 12 hours
         scheduler.add_job(get_live_usd_to_inr_rate, trigger=IntervalTrigger(hours=12), id="forex_sync",
                           replace_existing=True)
+        # 4b. Phone notifications (21 Oct): new failures / reports every 2 min, coach reminder 6 PM,
+        #     admin daily summary 8 PM, old rows removed nightly
+        from backend.notifications.inbox import run_job as run_notification_job
+        scheduler.add_job(run_notification_job, args=["scan"], trigger=IntervalTrigger(minutes=2), id="notify_scan",
+                          replace_existing=True, max_instances=1, coalesce=True)
+        scheduler.add_job(run_notification_job, args=["norec"], trigger=CronTrigger(hour=18, minute=0, timezone="Asia/Kolkata"),
+                          id="notify_no_recording", replace_existing=True, max_instances=1, coalesce=True)
+        scheduler.add_job(run_notification_job, args=["daily"], trigger=CronTrigger(hour=20, minute=0, timezone="Asia/Kolkata"),
+                          id="notify_daily_summary", replace_existing=True, max_instances=1, coalesce=True)
+        scheduler.add_job(run_notification_job, args=["cleanup"], trigger=CronTrigger(hour=3, minute=15, timezone="Asia/Kolkata"),
+                          id="notify_cleanup", replace_existing=True, max_instances=1, coalesce=True)
         # 5. One-off: queue transcriptions that a restart interrupted
         scheduler.add_job(resume_interrupted_transcriptions,
                           trigger=DateTrigger(run_date=datetime.now() + timedelta(seconds=60)),
@@ -194,6 +206,7 @@ app.include_router(recorder_settings_router)
 app.include_router(calls_router)
 app.include_router(assistant_router)
 app.include_router(report_share_router)
+app.include_router(phone_notifications_router)
 
 
 @app.get("/")

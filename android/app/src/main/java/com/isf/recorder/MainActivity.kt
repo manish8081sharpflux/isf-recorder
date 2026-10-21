@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
                     var laterFor by remember { mutableIntStateOf(0) }
                     val resumes = resumeCount.intValue
                     LaunchedEffect(resumes) {
+                        if (prefs.isLoggedIn) com.isf.recorder.sync.PhoneNotifications.collectNow(this@MainActivity)
                         laterFor = 0
                         while (prefs.isLoggedIn) {
                             if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {

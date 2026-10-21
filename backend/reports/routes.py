@@ -18,6 +18,7 @@ from backend.auth.routes import get_current_user
 from backend.database import get_db
 from backend.reports import service
 from backend.calls.access import call_access
+from backend.notifications.inbox import notify_safely, on_report_changed_by_admin
 
 logger = logging.getLogger("isf_recorder.reports.routes")
 router = APIRouter(prefix="/recordings", tags=["Reports"])
@@ -113,6 +114,7 @@ def save_report(recording_id: str, body: ReportUpdate, user: dict = Depends(get_
             VALUES (:id, :c, 'draft', :u, NOW())
         """), {"id": str(rec.id), "c": body.content, "u": user["user_id"]})
     db.commit()
+    notify_safely(on_report_changed_by_admin, db, str(rec.id), user, "edited")
     return _report_json(_report(db, str(rec.id)), user)
 
 
@@ -162,6 +164,7 @@ def finalize_report(recording_id: str, user: dict = Depends(get_current_user), d
     db.commit()
     if not row:
         raise HTTPException(status_code=409, detail="Only a written draft can be finalized")
+    notify_safely(on_report_changed_by_admin, db, str(rec.id), user, "finalized")
     return _report_json(_report(db, str(rec.id)), user)
 
 

@@ -220,6 +220,10 @@ fun SettingsScreen(
                 openSection == "calls", { toggle("calls") }) {
                 CallsSettingsSection(apiClient)
             }
+            SettingsSection("🔔", "Notifications", if (prefs.isSuperAdmin) "Your alerts · send a message to the team" else "Choose what you get",
+                openSection == "notifications", { toggle("notifications") }) {
+                NotificationsSettingsSection(apiClient)
+            }
 
             if (prefs.isAdmin) {
                 SettingsSection("👥", "Team", teamSummary, openSection == "team", { toggle("team") }) {

@@ -1387,6 +1387,23 @@ class ISFApiClient(context: Context) {
         sendForMap("POST", apiUrl("/recordings/$recordingId/report/translate"), mapOf("lang" to lang), longTimeout = true)
             .mapCatching { it["content"]?.toString() ?: throw IllegalStateException("No translation returned") }
 
+    // ── Phone notifications (21 Oct) ────────────────────────────────────────────
+
+    /** GET /notifications/inbox → {items:[{id, kind, title, body, recording_id}], latest_id}; null = start from now. */
+    suspend fun getNotificationInbox(afterId: Long?): Result<Map<String, Any?>> =
+        sendForMap("GET", apiUrl("/notifications/inbox", mapOf("after_id" to afterId)))
+
+    /** GET /notifications/settings → {items:[{kind, label, on}], can_announce} */
+    suspend fun getNotificationSettings(): Result<Map<String, Any?>> = sendForMap("GET", apiUrl("/notifications/settings"))
+
+    suspend fun setNotificationSettings(prefs: Map<String, Boolean>): Result<Map<String, Any?>> =
+        sendForMap("PUT", apiUrl("/notifications/settings"), mapOf("prefs" to prefs))
+
+    /** POST /notifications/announce (super admins) → {sent}. [audience] = all | coaches | admins */
+    suspend fun sendAnnouncement(message: String, audience: String): Result<Int> =
+        sendForMap("POST", apiUrl("/notifications/announce"), mapOf("message" to message, "audience" to audience))
+            .mapCatching { (it["sent"] as? Number)?.toInt() ?: 0 }
+
     /** POST /recordings/{id}/report/share-link → the web link to the full report (made once, never expires). */
     suspend fun getReportShareLink(recordingId: String, lang: String? = null): Result<String> =
         sendForMap("POST", apiUrl("/recordings/$recordingId/report/share-link"), mapOf("lang" to lang))

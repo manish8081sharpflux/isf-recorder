@@ -20,6 +20,9 @@ class UserPreferences(context: Context) {
         private const val KEY_NEEDS_NAME = "needs_name"
         private const val KEY_LAST_UPDATE_CHECK = "last_update_check_ms"
         private const val KEY_LAST_NOTIFIED_UPDATE = "last_notified_update_code"
+        private const val KEY_NOTIFY_CURSOR = "notify_inbox_cursor"
+        private const val KEY_NOTIFY_UPLOAD_STUCK = "notify_upload_stuck"
+        private const val KEY_UPLOAD_STUCK_AT = "upload_stuck_notified_ms"
         private const val KEY_VIEW_AS_COACH = "view_as_coach"
         private const val KEY_ROLE_LABEL = "role_label"
         private const val KEY_RECORDER_CONFIG_JSON = "recorder_config_json"
@@ -68,6 +71,20 @@ class UserPreferences(context: Context) {
     var lastUpdateCheckMs: Long
         get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
+
+    /** Last server notification id shown on this phone; -1 = never collected (start from now). */
+    var notifyCursor: Long
+        get() = prefs.getLong(KEY_NOTIFY_CURSOR, -1L)
+        set(value) = prefs.edit().putLong(KEY_NOTIFY_CURSOR, value).apply()
+
+    /** Copy of the server switch "A recording has not uploaded for 1 hour" (the phone itself checks). */
+    var notifyUploadStuck: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFY_UPLOAD_STUCK, true)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFY_UPLOAD_STUCK, value).apply()
+
+    var uploadStuckNotifiedMs: Long
+        get() = prefs.getLong(KEY_UPLOAD_STUCK_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_UPLOAD_STUCK_AT, value).apply()
 
     /** The newest version the "update available" phone notification was already shown for (once per version). */
     var lastNotifiedUpdateCode: Int

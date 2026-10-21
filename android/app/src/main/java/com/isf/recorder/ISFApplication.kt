@@ -30,6 +30,8 @@ class ISFApplication : Application() {
         com.isf.recorder.sync.CallSync.schedule(this)
         // Updates (21 Oct): a background check every few hours posts "New version available" once per version
         com.isf.recorder.sync.UpdateNotifier.schedule(this)
+        // Phone notifications (21 Oct): collect the server's notifications every 15 min + stuck-upload check
+        com.isf.recorder.sync.PhoneNotifications.schedule(this)
         // Bug M: a recording whose process was killed is saved and finished (nothing in this process records yet).
         val cutoff = processStartMs
         applicationScope.launch(Dispatchers.IO) {

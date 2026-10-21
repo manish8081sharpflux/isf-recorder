@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from backend.auth.routes import get_current_user
 from backend.config import AUDIO_STORAGE_ROOT
 from backend.database import get_db
+from backend.notifications.inbox import notify_safely, on_call_shared
 
 logger = logging.getLogger("isf_recorder.calls")
 router = APIRouter(tags=["Calls"])
@@ -170,6 +171,8 @@ def share_call(recording_id: str, body: ShareBody, current_user: dict = Depends(
     if not row:
         raise HTTPException(status_code=404, detail="Call not found")
     db.commit()
+    if body.shared:
+        notify_safely(on_call_shared, db, recording_id, current_user)
     return {"recording_id": recording_id, "shared_with_admin": body.shared}
 
 
