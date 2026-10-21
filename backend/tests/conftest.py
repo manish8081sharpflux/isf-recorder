@@ -8,7 +8,6 @@ Runs against a LOCAL copy of the production schema (database isf_jomi_test, migr
 - ISF_DISABLE_BACKGROUND_JOBS=1: no scheduler (no sweeper/resume/WhatsApp/forex jobs).
 - Every Gemini / AssemblyAI call must be mocked by the test; the forex internet fetch is disabled.
 """
-import ast
 import os
 import sys
 import tempfile
@@ -24,10 +23,11 @@ sys.path.insert(0, str(ROOT))
 def _test_db_url() -> str:
     url = os.getenv("ISF_TEST_DATABASE_URL")
     if not url:
-        src = (ROOT / "backend" / "config.py").read_text(encoding="utf-8")
-        for node in ast.walk(ast.parse(src)):
-            if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "DEFAULT_LOCAL_URL" for t in node.targets):
-                url = node.value.value.rsplit("/", 1)[0] + "/isf_jomi_test"
+        # DATABASE_URL from the local .env, with the database name replaced
+        env_file = ROOT / ".env"
+        for line in (env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []):
+            if line.startswith("DATABASE_URL="):
+                url = line.split("=", 1)[1].strip().rsplit("/", 1)[0] + "/isf_jomi_test"
     if not url or not url.rstrip("/").endswith("/isf_jomi_test"):
         raise RuntimeError("Tests only run against the local isf_jomi_test database")
     return url

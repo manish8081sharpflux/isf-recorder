@@ -1,10 +1,59 @@
-.env
-.env.*
-!.env.example
+# Python
 __pycache__/
-*.pyc
-.pytest_cache/
-*.log
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 venv/
 .venv/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# Audio files
+*.wav
+*.pcm
+audio_storage/
+isf-recorder-audio/
+
+# Android / Gradle
+.gradle/
+.kotlin/
+build/
+android/build/
+android/app/build/
+android/.gradle/
+android/.kotlin/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild
+.cxx/
+*.log
+.pytest_cache/
 *.apk
+
+# The released app the server hands out (C:\GroundUp\isf-recorderpp-release.apk): kept in the repo on purpose
+!/app-release.apk
