@@ -232,7 +232,7 @@ fun SettingsScreen(
                 SettingsSection("👥", "Team", teamSummary, openSection == "team", { toggle("team") }) {
                     TeamSection(apiClient, prefs)
                 }
-                SettingsSection("📋", "Lists", listsSummary, openSection == "lists", { toggle("lists") }) {
+                SettingsSection("🏠", "Balgruha", listsSummary, openSection == "lists", { toggle("lists") }) {
                     ListsSection(apiClient, prefs.roleLabel)
                 }
                 SettingsSection("📝", "Reports", reportsSummary, openSection == "reports", { toggle("reports") }) {
