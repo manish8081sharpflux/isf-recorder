@@ -55,6 +55,7 @@ from backend.assistant.routes import router as assistant_router
 from backend.reports.share import router as report_share_router
 from backend.reports.director_pov import router as director_pov_router
 from backend.names.routes import router as names_router
+from backend.webapp.routes import router as webapp_router
 from backend.notifications.inbox_routes import router as phone_notifications_router
 from backend.transcription.forex_sync import get_live_usd_to_inr_rate
 
@@ -210,6 +211,10 @@ app.include_router(assistant_router)
 app.include_router(report_share_router)
 app.include_router(director_pov_router)
 app.include_router(names_router)
+app.include_router(webapp_router)
+# Jomi web app (21 Oct): the static pages at /web (after the /web/audio routes above, which win)
+from fastapi.staticfiles import StaticFiles
+app.mount("/web", StaticFiles(directory=str(Path(__file__).parent / "webapp" / "static"), html=True), name="webapp")
 app.include_router(phone_notifications_router)
 
 
