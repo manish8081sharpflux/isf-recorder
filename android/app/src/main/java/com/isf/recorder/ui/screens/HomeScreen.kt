@@ -49,6 +49,8 @@ import com.isf.recorder.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
 
@@ -115,6 +117,23 @@ fun HomeScreen(
     var reportFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var povFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var expandedId by rememberSaveable { mutableStateOf<String?>(null) }   // the one open recording card (kept on Back)
+    // Tapping a card jumps up to the player; closing a report / Director's POV opened from there scrolls back down
+    // to that card (21 Oct). Only while the person is still up at the player (they did not scroll away themselves).
+    var returnScroll by rememberSaveable { mutableStateOf<Int?>(null) }
+    var returnOnEnter by rememberSaveable { mutableStateOf<Int?>(null) }   // full report / transcript opened: on Back
+    fun backToCard(leaving: Boolean = false) {   // leaving = another screen opens right away (Home is rebuilt on Back)
+        val to = returnScroll ?: return
+        returnScroll = null
+        if (scrollState.value >= 300) return
+        if (leaving) returnOnEnter = to else scope.launch { scrollState.animateScrollTo(to) }
+    }
+    LaunchedEffect(Unit) {
+        val to = returnOnEnter ?: return@LaunchedEffect
+        returnOnEnter = null
+        // wait (max ~1 s) until the list is laid out far enough to reach the card
+        withTimeoutOrNull(1_000) { snapshotFlow { scrollState.maxValue }.first { it >= to } }
+        scrollState.scrollTo(to)
+    }
     var callsRefresh by remember { mutableStateOf(0) }   // reload Calls after a call popup closes
     var editTarget by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var eraseTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
@@ -200,6 +219,7 @@ fun HomeScreen(
             showOwner = isAdmin,                 // admins see every coach's recordings: show who recorded it
             onOpen = {
                 vm.select(rec)
+                returnScroll = scrollState.value          // where the card was: closing its report comes back here
                 scope.launch { scrollState.animateScrollTo(0) }
             },
             onReport = { reportFor = rec },
@@ -443,13 +463,13 @@ fun HomeScreen(
         ReportSheet(
             recordingId = id,
             title = cleanTitle(rec),
-            onDismiss = { reportFor = null; callsRefresh++ },
-            onOpenFull = if (isAdmin) ({ reportFor = null; onOpenFullReport(id) }) else null,
-            onOpenTranscript = { reportFor = null; onOpenTranscript(id) }
+            onDismiss = { reportFor = null; callsRefresh++; backToCard() },
+            onOpenFull = if (isAdmin) ({ reportFor = null; backToCard(leaving = true); onOpenFullReport(id) }) else null,
+            onOpenTranscript = { reportFor = null; backToCard(leaving = true); onOpenTranscript(id) }
         )
     }
     povFor?.let { rec ->
-        if (isAdmin) DirectorPovSheet(recordingId = rec["id"]?.toString().orEmpty(), title = cleanTitle(rec), onDismiss = { povFor = null })
+        if (isAdmin) DirectorPovSheet(recordingId = rec["id"]?.toString().orEmpty(), title = cleanTitle(rec), onDismiss = { povFor = null; backToCard() })
     }
     editTarget?.let { rec ->
         EditTitleDialog(
