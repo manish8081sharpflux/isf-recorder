@@ -56,6 +56,7 @@ fun RecordingsListScreen(
     var eraseTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
     var editTarget by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var reportFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var povFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var mergeRunning by remember { mutableStateOf(false) }
 
     suspend fun fetch(page: Int) = api.listRecordings(
@@ -160,7 +161,9 @@ fun RecordingsListScreen(
                                 selectionMode = selectionMode,
                                 selected = id in selectedIds,
                                 onToggleSelect = { selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id },
-                                onLongPress = { selectedIds = selectedIds + id }
+                                onLongPress = { selectedIds = selectedIds + id },
+                                // Director's POV: admins only (not while a super admin views as Coach), never calls
+                                onDirectorPov = if (isAdmin && rec["source"]?.toString() != "call") ({ povFor = rec }) else null
                             )
                         }
                         if (recordings.size < totalCount) {
@@ -199,6 +202,9 @@ fun RecordingsListScreen(
             onDismiss = { reportFor = null },
             onOpenFull = if (isAdmin) ({ reportFor = null; onOpenReport(id) }) else null
         )
+    }
+    povFor?.let { rec ->
+        if (isAdmin) DirectorPovSheet(recordingId = rec["id"]?.toString().orEmpty(), title = cleanTitle(rec), onDismiss = { povFor = null })
     }
     mergeTargets?.let { recs ->
         MergeDialog(

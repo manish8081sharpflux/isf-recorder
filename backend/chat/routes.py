@@ -30,6 +30,7 @@ from backend.chat.gemini_chat import (
     clean_chat_response,
 )
 from backend.calls.access import call_access, CALL_VISIBILITY_SQL, visibility_params
+from backend.reports.director_pov import is_director_template
 
 logger = logging.getLogger("isf_recorder.chat.routes")
 router = APIRouter(prefix="/chat", tags=["AI Chat"])
@@ -264,6 +265,8 @@ def _chat_turn(db: Session, current_user: dict, conv_id: str, mode: str, recordi
         # Quick chips (e.g. "🎓 Coach Report") only send a sentence naming the template; attach the
         # full saved template so Gemini gets every section and rule, not just the template's name.
         template_dict = _template_named_in_message(db, org_id, req.message)
+    if template_dict and current_user.get("role") != "admin" and is_director_template(template_dict["title"]):
+        raise HTTPException(status_code=403, detail="Director's POV is only for admins")
     template_id = template_dict["id"] if template_dict else None
 
     hist_rows = db.execute(text("""
@@ -554,6 +557,7 @@ def list_chat_templates(
         {"org_id": org_id}
     ).fetchall()
 
+    is_admin = current_user.get("role") == "admin"
     return [
         {
             "id": str(r[0]),
@@ -567,6 +571,7 @@ def list_chat_templates(
             "updated_at": r[8].isoformat() if r[8] else None,
         }
         for r in rows
+        if is_admin or not is_director_template(r[1])     # Director's POV: admins only
     ]
 
 

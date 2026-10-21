@@ -40,7 +40,8 @@ fun RecordingCard(
     selected: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,   // long-press starts merge/delete selection
-    highlighted: Boolean = false         // currently loaded in the Home player
+    highlighted: Boolean = false,        // currently loaded in the Home player
+    onDirectorPov: (() -> Unit)? = null  // admins only: "🎬 Director's POV" next to Report
 ) {
     val status = rec["status"]?.toString()
     val reportStatus = rec["report_status"]?.toString()
@@ -118,8 +119,16 @@ fun RecordingCard(
 
         if (!selectionMode) {
             Spacer(Modifier.height(12.dp))
+            if (onDirectorPov != null) {
+                // Admins: Report and Director's POV side by side (one tap each); AI Chat moves to the next row
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionChipButton("Report", R.drawable.ic_report, onReport, modifier = Modifier.weight(1f))
+                    ActionChipButton("🎬 Director's POV", null, onDirectorPov, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionChipButton("Report", R.drawable.ic_report, onReport)
+                if (onDirectorPov == null) ActionChipButton("Report", R.drawable.ic_report, onReport)
                 ActionChipButton(
                     "AI Chat", R.drawable.ic_chat, onChat,
                     tint = MaterialTheme.colorScheme.onBackground, container = JomiCard, border = JomiBorder

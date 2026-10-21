@@ -53,6 +53,7 @@ from backend.settings.recorder import router as recorder_settings_router
 from backend.calls.routes import router as calls_router
 from backend.assistant.routes import router as assistant_router
 from backend.reports.share import router as report_share_router
+from backend.reports.director_pov import router as director_pov_router
 from backend.notifications.inbox_routes import router as phone_notifications_router
 from backend.transcription.forex_sync import get_live_usd_to_inr_rate
 
@@ -206,6 +207,7 @@ app.include_router(recorder_settings_router)
 app.include_router(calls_router)
 app.include_router(assistant_router)
 app.include_router(report_share_router)
+app.include_router(director_pov_router)
 app.include_router(phone_notifications_router)
 
 
