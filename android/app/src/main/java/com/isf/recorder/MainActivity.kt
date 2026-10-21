@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -98,15 +99,25 @@ class MainActivity : ComponentActivity() {
 
                     val currentScreen = backStack.lastOrNull() ?: if (prefs.isLoggedIn) Screen.Home else Screen.Login
 
+                    // Each screen in the back stack keeps its state (scroll, open card, selection) while another
+                    // screen is on top, so Back returns to exactly where the person was. Closed screens forget it.
+                    val screenStates = rememberSaveableStateHolder()
+
                     fun navigateTo(screen: Screen) {
+                        // Settings is a fresh start: Home shows "Previous recordings" again afterwards
+                        if (screen == Screen.Settings) homeVm.allExpanded = false
                         backStack.add(screen)
                     }
 
                     fun navigateBack() {
-                        if (backStack.size > 1) backStack.removeAt(backStack.size - 1)
+                        if (backStack.size > 1) {
+                            val closed = backStack.removeAt(backStack.size - 1)
+                            if (closed !in backStack) screenStates.removeState(closed.toString())
+                        }
                     }
 
                     fun resetTo(screen: Screen) {
+                        backStack.forEach { screenStates.removeState(it.toString()) }
                         backStack.clear()
                         backStack.add(screen)
                     }
@@ -191,6 +202,7 @@ class MainActivity : ComponentActivity() {
                             },
                             label = "ScreenTransition"
                         ) { target ->
+                          screenStates.SaveableStateProvider(target.toString()) {
                             when (target) {
                                 is Screen.Login -> LoginScreen(onLoginSuccess = { askName = prefs.needsName; resetTo(Screen.Home) })
 
@@ -257,6 +269,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             }
+                          }
                         }
                     }
                 }

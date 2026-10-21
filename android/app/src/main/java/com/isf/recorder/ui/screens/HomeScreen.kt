@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,12 +114,12 @@ fun HomeScreen(
 
     var reportFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var povFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
-    var expandedId by remember { mutableStateOf<String?>(null) }   // the one open recording card
+    var expandedId by rememberSaveable { mutableStateOf<String?>(null) }   // the one open recording card (kept on Back)
     var callsRefresh by remember { mutableStateOf(0) }   // reload Calls after a call popup closes
     var editTarget by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var eraseTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
     var mergeTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
-    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    var selectedIds by rememberSaveable(stateSaver = SelectedIdsSaver) { mutableStateOf(setOf<String>()) }   // kept on Back
     val selectionMode = selectedIds.isNotEmpty()
 
     // Notification deep link (coaches): load the recording and open its report popup.
@@ -336,8 +337,7 @@ fun HomeScreen(
             }
 
             // ── Recordings ─────────────────────────────────────────────────────────
-            // Home always opens on "Previous recordings" + See all (the view model outlives this screen)
-            DisposableEffect(Unit) { onDispose { vm.allExpanded = false } }
+            // "See all" stays open when coming Back from a report / chat / transcript; Settings resets it (MainActivity)
             Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(

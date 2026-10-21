@@ -19,6 +19,12 @@ import com.isf.recorder.data.api.ISFApiClient
 import com.isf.recorder.ui.theme.*
 import kotlinx.coroutines.launch
 
+/** Keeps the long-press selection (recording ids) when the person opens a report and comes Back. */
+val SelectedIdsSaver = androidx.compose.runtime.saveable.listSaver<Set<String>, String>(
+    save = { it.toList() },
+    restore = { it.toSet() }
+)
+
 /** Bottom bar shown after a long-press: "N selected" + Merge + Delete. */
 @Composable
 fun SelectionActionBar(

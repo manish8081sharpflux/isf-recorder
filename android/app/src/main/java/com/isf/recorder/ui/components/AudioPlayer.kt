@@ -203,14 +203,38 @@ class AudioPlayerController(
     }
 }
 
-/** Remembers a controller for [url]; releases the player when it leaves composition or the URL changes. */
+/**
+ * Where each recording was paused when its screen closed (e.g. Home → Report), so Back continues from the
+ * same second and speed. Kept while the app runs.
+ */
+object PlaybackPositions {
+    private val positions = mutableMapOf<String, Pair<Long, Float>>()
+    fun save(url: String, positionMs: Long, speed: Float) { if (positionMs > 0 || speed != 1f) positions[url] = positionMs to speed }
+    fun restore(url: String): Pair<Long, Float>? = positions[url]
+}
+
+/**
+ * Remembers a controller for [url]; releases the player when it leaves composition or the URL changes.
+ * Leaving the screen stops the audio; the position and speed are remembered and restored when it comes back.
+ */
 @Composable
 fun rememberAudioPlayerController(url: String, audioDeleted: Boolean = false): AudioPlayerController {
     val context = LocalContext.current
     val token = remember { UserPreferences(context).token }
-    val controller = remember(url, audioDeleted) { AudioPlayerController(context, url, token, audioDeleted) }
+    val controller = remember(url, audioDeleted) {
+        AudioPlayerController(context, url, token, audioDeleted).also { c ->
+            PlaybackPositions.restore(url)?.let { (ms, speed) ->
+                if (ms > 0) c.seekTo(ms)
+                if (speed != 1f) c.changeSpeed(speed)
+            }
+        }
+    }
     DisposableEffect(controller) {
-        onDispose { controller.release() }
+        onDispose {
+            controller.tick()
+            PlaybackPositions.save(url, controller.positionMs, controller.speed)
+            controller.release()
+        }
     }
     LaunchedEffect(controller) {
         while (true) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -50,14 +51,14 @@ fun RecordingsListScreen(
     var people by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var person by remember { mutableStateOf(AllRecordingsFilters.person) }
 
-    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    var selectedIds by rememberSaveable(stateSaver = SelectedIdsSaver) { mutableStateOf(setOf<String>()) }   // kept on Back
     val selectionMode = selectedIds.isNotEmpty()
     var mergeTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
     var eraseTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
     var editTarget by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var reportFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var povFor by remember { mutableStateOf<Map<String, Any?>?>(null) }
-    var expandedId by remember { mutableStateOf<String?>(null) }   // the one open recording card
+    var expandedId by rememberSaveable { mutableStateOf<String?>(null) }   // the one open recording card (kept on Back)
     var mergeRunning by remember { mutableStateOf(false) }
 
     suspend fun fetch(page: Int) = api.listRecordings(
