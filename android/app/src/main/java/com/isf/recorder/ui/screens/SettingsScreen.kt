@@ -199,6 +199,9 @@ fun SettingsScreen(
         ?.let { it["short_name"]?.toString() ?: it["name"]?.toString() } ?: selectedTranscriptionModel
 
     SlideBackContainer(onBack = onBack) {
+        // Phone Back: first closes the open section (e.g. Lists); with none open, the container goes to Home.
+        // Declared inside the container so it wins over the container's own Back handler.
+        androidx.activity.compose.BackHandler(enabled = openSection != null) { openSection = null }
         Column(
             modifier = Modifier
                 .fillMaxSize()

@@ -121,6 +121,11 @@ fun HomeScreen(
     var mergeTargets by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
     var selectedIds by rememberSaveable(stateSaver = SelectedIdsSaver) { mutableStateOf(setOf<String>()) }   // kept on Back
     val selectionMode = selectedIds.isNotEmpty()
+    // Phone Back on Home: first removes the long-press ticks, then closes "See all";
+    // with nothing open, MainActivity's "Press Back again to exit" takes over.
+    androidx.activity.compose.BackHandler(enabled = selectionMode || vm.allExpanded) {
+        if (selectionMode) selectedIds = emptySet() else vm.allExpanded = false
+    }
 
     // Notification deep link (coaches): load the recording and open its report popup.
     LaunchedEffect(vm.pendingReportId) {

@@ -185,6 +185,17 @@ class MainActivity : ComponentActivity() {
                     }
 
                     BackHandler(enabled = backStack.size > 1) { navigateBack() }
+                    // On the first screen: one Back only warns, a second Back within 2 s closes Jomi
+                    // (a recording keeps running in its own service either way). Screens' own Back handlers win.
+                    var exitArmedAt by remember { mutableLongStateOf(0L) }
+                    BackHandler(enabled = backStack.size <= 1) {
+                        val now = System.currentTimeMillis()
+                        if (now - exitArmedAt < 2_000) finish()
+                        else {
+                            exitArmedAt = now
+                            Toast.makeText(this@MainActivity, "Press Back again to exit", Toast.LENGTH_SHORT).show()
+                        }
+                    }
 
                     if (askName && prefs.isLoggedIn && currentScreen !is Screen.Login) {
                         AskNameScreen(api = api, onDone = { askName = false; homeVm.refresh() })
