@@ -9,6 +9,11 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -268,6 +273,7 @@ fun HomeScreen(
     val panelHeight = with(density) { panelHeightPx.toDp() }
     val showPanel = !(vm.callsTab && !hasSession)
     var bandhuSoon by remember { mutableStateOf(false) }
+    var panelExpanded by rememberSaveable { mutableStateOf(false) }   // recorder panel: only the buttons until opened
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
@@ -410,6 +416,8 @@ fun HomeScreen(
                 onResume = { sendAction(AudioRecordingService.ACTION_RESUME) },
                 onStop = { sendAction(AudioRecordingService.ACTION_STOP) },
                 onUsePhoneMic = { sendAction(AudioRecordingService.ACTION_USE_PHONE_MIC) },
+                expanded = panelExpanded,
+                onToggle = { panelExpanded = !panelExpanded },
                 modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { panelHeightPx = it.height }
             )
         }
@@ -516,29 +524,29 @@ private fun HomeHeader(prefs: UserPreferences, cfg: RecorderConfig, onSettings: 
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF16A37F), Color(0xFF0F8F72))))
-            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 52.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 46.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             // Avatar opens Settings directly (round 2)
-            Surface(onClick = onSettings, shape = CircleShape, color = Color.White, modifier = Modifier.size(58.dp)) {
+            Surface(onClick = onSettings, shape = CircleShape, color = Color.White, modifier = Modifier.size(48.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(initialsOf(name), color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(initialsOf(name), color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(name, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(3.dp))
                 Surface(color = Color.White.copy(alpha = 0.2f), shape = RoundedCornerShape(10.dp)) {
-                    Text("${prefs.orgName ?: "ISF"} · ${roleText.uppercase()}", color = Color.White, fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                    Text("${prefs.orgName ?: "ISF"} · ${roleText.uppercase()}", color = Color.White, fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(painterResource(R.drawable.ic_calendar), null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text(todayHeaderDate(), color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+                    Text(todayHeaderDate(), color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp)
                 }
             }
             // Live sync pill (tap = upload now)
@@ -611,19 +619,19 @@ private fun HomeTabs(modes: List<String>, selected: String, onSelect: (String) -
 private fun BandhuCard(onAsk: () -> Unit) {
     Surface(color = JomiMint.copy(alpha = 0.6f), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, JomiMintBorder),
         modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(56.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-                Text("🤖", fontSize = 30.sp)
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(36.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
+                Text("🤖", fontSize = 20.sp)
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("ISF Bandhu", color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text("Ask specific questions from Playground using ISF Bandhu.", color = JomiTextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                Text("ISF Bandhu", color = JomiTeal, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Ask specific questions", color = JomiTextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(8.dp))
-            Surface(onClick = onAsk, color = Color.White, shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, JomiMintBorder)) {
-                Text("Ask Bandhu →", color = JomiTeal, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+            Surface(onClick = onAsk, color = Color.White, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, JomiMintBorder)) {
+                Text("Ask Bandhu →", color = JomiTeal, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
             }
         }
     }
@@ -727,6 +735,8 @@ private fun RecorderPanel(
     onResume: () -> Unit,
     onStop: () -> Unit,
     onUsePhoneMic: () -> Unit,
+    expanded: Boolean,
+    onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val status = session?.status
@@ -742,13 +752,27 @@ private fun RecorderPanel(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) {
-            Box(Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(JomiBorder))
-            Spacer(Modifier.height(10.dp))
+            // Handle + ⌃ / ⌄: opens the details (mic, Balgruha / coach, timer); closed = only the buttons
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(JomiBorder))
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                    contentDescription = if (expanded) "Hide details" else "Show Balgruha, coach and timer",
+                    tint = JomiTeal, modifier = Modifier.size(22.dp)
+                )
+                Text(if (expanded) "Hide" else "Details", color = JomiTeal, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(6.dp))
 
+            // Urgent: always shown, also when closed
             if (session?.micLost == true) {
                 MicLostPrompt(message = session.micMessage, onUsePhoneMic = onUsePhoneMic, onStop = onStop)
                 Spacer(Modifier.height(8.dp))
-            } else {
+            } else if (expanded) {
                 MicStatusBar(externalMic = externalMic, activeMic = session?.micType)
                 Spacer(Modifier.height(10.dp))
             }
@@ -761,6 +785,8 @@ private fun RecorderPanel(
                 Spacer(Modifier.height(8.dp))
             }
 
+            AnimatedVisibility(visible = expanded) {
+            Column {
             // Who / where: two fields side by side
             Row(verticalAlignment = Alignment.Bottom) {
                 if (mode == "schedule") {
@@ -836,6 +862,8 @@ private fun RecorderPanel(
                     textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
             }
             Spacer(Modifier.height(8.dp))
+            }
+            }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 RoundControl(
@@ -844,16 +872,17 @@ private fun RecorderPanel(
                     enabled = isRecording || isPaused,
                     style = if (isPaused) ControlStyle.Primary else ControlStyle.Neutral,
                     onClick = { if (isPaused) onResume() else onPause() },
-                    size = 54.dp
+                    size = 50.dp
                 )
                 RoundControl(
                     icon = R.drawable.ic_mic,
                     label = if (isRecording) "Recording" else "Record",
-                    enabled = canStart,
+                    // not ready (Balgruha / coach missing): the tap opens the details so they can be chosen
+                    enabled = canStart || (session == null && !starting && !locked),
                     style = if (session != null || starting) ControlStyle.Live else ControlStyle.Primary,
                     pulsing = isRecording,
-                    onClick = onRecord,
-                    size = 74.dp
+                    onClick = { if (canStart) onRecord() else if (!expanded) onToggle() },
+                    size = 64.dp
                 )
                 RoundControl(
                     icon = R.drawable.ic_stop,
@@ -862,7 +891,7 @@ private fun RecorderPanel(
                     style = ControlStyle.Danger,
                     busy = isFinalizing,
                     onClick = onStop,
-                    size = 54.dp
+                    size = 50.dp
                 )
             }
         }
