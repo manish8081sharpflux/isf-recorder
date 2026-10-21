@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -69,10 +70,12 @@ fun TranscriptScreen(recordingId: String, onBack: () -> Unit) {
             speakerName(it["speaker"]).contains(q, ignoreCase = true) }
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    val listState = rememberLazyListState()
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),   // end: room for the scroll bar
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
@@ -186,6 +189,7 @@ fun TranscriptScreen(recordingId: String, onBack: () -> Unit) {
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+        ScrollbarFor(listState)
     }
 
     if (showModels) {

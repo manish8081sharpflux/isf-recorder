@@ -85,6 +85,7 @@ fun ReportSheet(
         }
     }
 
+    val sheetScroll = rememberScrollState()
     val shareBody = {
         val head = (listOf(title) + details).joinToString("\n")
         "$head\n\n${if (editing) text else tr.shown(content).ifBlank { content }}"
@@ -135,7 +136,8 @@ fun ReportSheet(
                     ) { Text(if (busy == "save") "Saving…" else "Save") }
                     OutlinedButton(onClick = { audio.pause(); editing = false; text = content }, enabled = busy == null, modifier = Modifier.weight(1f)) { Text("Cancel") }
                 }
-            } else Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            } else Box(Modifier.weight(1f, fill = false)) {
+              Column(Modifier.padding(end = 14.dp).verticalScroll(sheetScroll)) {   // end: room for the scroll bar
                 when {
                     loading -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = JomiGreen)
@@ -200,6 +202,8 @@ fun ReportSheet(
                         }
                     }
                 }
+              }
+              ScrollbarFor(sheetScroll)
             }
 
             if (!editMode && report != null && status != "generating") {

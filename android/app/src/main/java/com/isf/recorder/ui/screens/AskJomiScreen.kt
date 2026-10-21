@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -90,15 +91,20 @@ fun AskJomiScreen(
                     Text("No conversations yet", fontWeight = FontWeight.Bold)
                     Text("Ask about your sessions, children's progress, or anything recorded.", color = JomiTextMuted, fontSize = 13.sp)
                 }
-                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                    items(items, key = { it["id"]?.toString() ?: it.hashCode().toString() }) { conv ->
-                        ConversationRow(
-                            conv = conv,
-                            onOpen = { onOpenConversation(conv) },
-                            onRename = { renameTarget = conv },
-                            onDelete = { deleteTarget = conv }
-                        )
+                else -> Box(Modifier.weight(1f)) {
+                    val listState = rememberLazyListState()
+                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize().padding(end = 14.dp)) {   // end: room for the scroll bar
+                        items(items, key = { it["id"]?.toString() ?: it.hashCode().toString() }) { conv ->
+                            ConversationRow(
+                                conv = conv,
+                                onOpen = { onOpenConversation(conv) },
+                                onRename = { renameTarget = conv },
+                                onDelete = { deleteTarget = conv }
+                            )
+                        }
                     }
+                    ScrollbarFor(listState)
                 }
             }
         }

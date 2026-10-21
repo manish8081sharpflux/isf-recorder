@@ -31,6 +31,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.isf.recorder.data.api.ISFApiClient
+import com.isf.recorder.ui.components.MarkdownText
+import com.isf.recorder.ui.components.ScrollbarFor
 import com.isf.recorder.ui.components.SlideBackContainer
 import com.isf.recorder.ui.theme.*
 import kotlinx.coroutines.launch
@@ -463,7 +465,7 @@ fun SessionChatScreen(
                         state = listState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(start = 12.dp, end = 18.dp, top = 8.dp, bottom = 8.dp),   // end: room for the scroll bar
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(messages) { msg ->
@@ -556,12 +558,8 @@ fun SessionChatScreen(
                                             Spacer(modifier = Modifier.height(6.dp))
 
                                             SelectionContainer {
-                                                Text(
-                                                    text = content,
-                                                    color = colors.onBackground,
-                                                    fontSize = 14.sp,
-                                                    lineHeight = 21.sp
-                                                )
+                                                // AI answers are Markdown: show bold / bullets / headings, not ** and *
+                                                MarkdownText(content)
                                             }
 
                                             Spacer(modifier = Modifier.height(8.dp))
@@ -626,6 +624,7 @@ fun SessionChatScreen(
                             }
                         }
                     }
+                    ScrollbarFor(listState)   // shows how much is left; drag to jump
                 }
 
                 // Error Banner

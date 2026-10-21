@@ -68,7 +68,9 @@ fun DirectorPovSheet(recordingId: String, title: String, onDismiss: () -> Unit) 
                     Text("Writing the Director's POV… this takes about a minute.", fontSize = 14.sp)
                 }
                 status == "error" -> Text("⚠️ ${pov?.get("error_message") ?: "It could not be made."}", color = RecordRed, fontSize = 14.sp)
-                else -> Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                else -> Box(Modifier.heightIn(max = 520.dp)) {
+                  val povScroll = rememberScrollState()
+                  Column(Modifier.padding(end = 14.dp).verticalScroll(povScroll)) {   // end: room for the scroll bar
                     MarkdownText(content)
                     val by = pov?.get("generated_by_name")?.toString()?.takeIf { it.isNotBlank() && it != "null" }
                     val at = shortWhen(pov?.get("generated_at"))
@@ -77,6 +79,8 @@ fun DirectorPovSheet(recordingId: String, title: String, onDismiss: () -> Unit) 
                         Text(listOfNotNull(by?.let { "Made by $it" }, at.takeIf { it.isNotBlank() }).joinToString(" · "),
                             color = JomiTextMuted, fontSize = 12.sp)
                     }
+                  }
+                  ScrollbarFor(povScroll)
                 }
             }
 

@@ -157,7 +157,9 @@ fun ReportScreen(
             }
 
             // ── Report body (scrolls under the pinned player) ──────────────────
-            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            val bodyScroll = rememberScrollState()
+            Box(Modifier.weight(1f)) {
+            Column(modifier = Modifier.fillMaxSize().padding(end = 14.dp).verticalScroll(bodyScroll)) {   // end: room for the scroll bar
                 when {
                     loading -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = JomiGreen)
@@ -247,6 +249,8 @@ fun ReportScreen(
                     Text("View transcript", color = JomiTeal, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(24.dp))
+            }
+            ScrollbarFor(bodyScroll)
             }
         }
     }
