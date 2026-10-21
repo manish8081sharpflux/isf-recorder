@@ -328,7 +328,9 @@ fun HomeScreen(
                         onChat = { onOpenChat(targetId, cleanTitle(target)) },
                         onCopy = { scope.launch { copyOrShareRecording(context, api, target, share = false) } },
                         onShare = { scope.launch { copyOrShareRecording(context, api, target, share = true) } },
-                        showOwner = isAdmin
+                        showOwner = isAdmin,
+                        // Director's POV: admins only (not while a super admin views as Coach), never calls
+                        onDirectorPov = if (isAdmin && target["source"]?.toString() != "call") ({ povFor = target + ("id" to targetId) }) else null
                     )
                 }
             }
@@ -551,7 +553,8 @@ private fun PlayerCard(
     onChat: () -> Unit,
     onCopy: () -> Unit,
     onShare: () -> Unit,
-    showOwner: Boolean = false
+    showOwner: Boolean = false,
+    onDirectorPov: (() -> Unit)? = null   // admins only: "🎬 Director's POV" next to Report
 ) {
     val id = rec["id"].toString()
     val title = statusItem?.get("title")?.toString()?.takeIf { it.isNotBlank() && it != "null" } ?: cleanTitle(rec)
@@ -583,6 +586,23 @@ private fun PlayerCard(
     TranscriptionStatusCard(state = ui, retrying = retrying, onRetry = onRetry, onOpenReport = onReport)
     Spacer(Modifier.height(10.dp))
     val done = ui is TranscriptionUi.Done && !ui.noSpeech
+    if (onDirectorPov != null) {
+        // Admins: Report and Director's POV side by side; AI Chat / Copy / Share on the next row
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            ActionChipButton("Report", R.drawable.ic_report, onReport, modifier = Modifier.weight(1f))
+            ActionChipButton("🎬 Director's POV", null, onDirectorPov, modifier = Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            ActionChipButton("AI Chat", R.drawable.ic_chat, onChat, modifier = Modifier.weight(1f),
+                tint = MaterialTheme.colorScheme.onBackground, container = Color.White, border = JomiBorder)
+            ActionChipButton("Copy", R.drawable.ic_copy, onCopy, enabled = done, modifier = Modifier.weight(1f),
+                tint = JomiTextMuted, container = Color.White, border = JomiBorder)
+            ActionChipButton("Share", R.drawable.ic_share, onShare, enabled = done, modifier = Modifier.weight(1f),
+                tint = JomiTextMuted, container = Color.White, border = JomiBorder)
+        }
+        return
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         ActionChipButton("Report", R.drawable.ic_report, onReport, modifier = Modifier.weight(1f))
         ActionChipButton("AI Chat", R.drawable.ic_chat, onChat, modifier = Modifier.weight(1f),
