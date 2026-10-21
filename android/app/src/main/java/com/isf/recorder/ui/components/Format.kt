@@ -264,14 +264,19 @@ fun recordingPeopleLine(rec: Map<String, Any?>): String? {
     val coaches = namesOf(rec["assistant_coaches"]).ifEmpty {
         listOfNotNull(rec["assistant_coach"]?.toString()?.takeIf { it.isNotBlank() && it != "null" })
     }
-    val parts = if (rec["mode"]?.toString() == "meeting") {
-        listOf(namesOf(rec["participants"]).joinToString(", "))
+    val meeting = rec["mode"]?.toString() == "meeting"
+    val people = if (meeting) namesOf(rec["participants"]) else coaches
+    val parts = if (meeting) {
+        listOf(people.joinToString(", "))
     } else {
         listOf(rec["balgruh_name"]?.toString()?.takeIf { it != "null" }.orEmpty(), coaches.joinToString(", "))
     }
     val line = parts.filter { it.isNotBlank() }.joinToString(" · ").ifBlank { null }
-    // Schedule titles are already "<Balgruh> · <coaches>": do not repeat them under the title
-    return line?.takeUnless { rec["title"]?.toString()?.trim().equals(it, ignoreCase = true) }
+    val title = rec["title"]?.toString()?.trim().orEmpty()
+    // Schedule titles are already "<Balgruh> · <coaches>": do not repeat them under the title. An edited title
+    // ("Shri Ramkrushna VS - Archana, Sanket") that still names every coach / participant counts as the same.
+    val titleNamesEveryone = people.isNotEmpty() && people.all { title.contains(it.trim(), ignoreCase = true) }
+    return line?.takeUnless { title.equals(it, ignoreCase = true) || titleNamesEveryone }
 }
 
 /** True when the server says the audio went to the old 7-day cleanup (audio_deleted_at set). */
