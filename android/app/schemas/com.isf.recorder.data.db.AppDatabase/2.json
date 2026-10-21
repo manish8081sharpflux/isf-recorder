@@ -1,0 +1,236 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "74c2cc0cceb1505e22c590bbfec05bf1",
+    "entities": [
+      {
+        "tableName": "audio_chunks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` TEXT NOT NULL, `chunkIndex` INTEGER NOT NULL, `filePath` TEXT NOT NULL, `durationSeconds` REAL NOT NULL, `sizeBytes` INTEGER NOT NULL, `checksum` TEXT NOT NULL, `isUploaded` INTEGER NOT NULL, `uploadedAt` INTEGER, `createdAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chunkIndex",
+            "columnName": "chunkIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "filePath",
+            "columnName": "filePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationSeconds",
+            "columnName": "durationSeconds",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checksum",
+            "columnName": "checksum",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isUploaded",
+            "columnName": "isUploaded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uploadedAt",
+            "columnName": "uploadedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_audio_chunks_sessionId_chunkIndex",
+            "unique": true,
+            "columnNames": [
+              "sessionId",
+              "chunkIndex"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_audio_chunks_sessionId_chunkIndex` ON `${TABLE_NAME}` (`sessionId`, `chunkIndex`)"
+          },
+          {
+            "name": "index_audio_chunks_isUploaded",
+            "unique": false,
+            "columnNames": [
+              "isUploaded"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_audio_chunks_isUploaded` ON `${TABLE_NAME}` (`isUploaded`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "recording_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sessionId` TEXT NOT NULL, `state` TEXT NOT NULL, `startedAtMs` INTEGER NOT NULL, `recordingId` TEXT, `micSource` TEXT NOT NULL, `mode` TEXT, `balgruhName` TEXT, `assistantCoach` TEXT, `participantsJson` TEXT, `title` TEXT, `startSynced` INTEGER NOT NULL, `startAttempts` INTEGER NOT NULL, `totalChunks` INTEGER NOT NULL, `voiceSeconds` INTEGER NOT NULL, `sessionSeconds` INTEGER NOT NULL, `silenceSkippedSeconds` INTEGER NOT NULL, `stoppedAtMs` INTEGER, `finishedAtMs` INTEGER, `updatedAtMs` INTEGER NOT NULL, PRIMARY KEY(`sessionId`))",
+        "fields": [
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMs",
+            "columnName": "startedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recordingId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "micSource",
+            "columnName": "micSource",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mode",
+            "columnName": "mode",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "balgruhName",
+            "columnName": "balgruhName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "assistantCoach",
+            "columnName": "assistantCoach",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "participantsJson",
+            "columnName": "participantsJson",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "startSynced",
+            "columnName": "startSynced",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startAttempts",
+            "columnName": "startAttempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalChunks",
+            "columnName": "totalChunks",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "voiceSeconds",
+            "columnName": "voiceSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionSeconds",
+            "columnName": "sessionSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "silenceSkippedSeconds",
+            "columnName": "silenceSkippedSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stoppedAtMs",
+            "columnName": "stoppedAtMs",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "finishedAtMs",
+            "columnName": "finishedAtMs",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updatedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sessionId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '74c2cc0cceb1505e22c590bbfec05bf1')"
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">ISF Recorder</string>
+    <string name="recording_notification_title">ISF Recorder Active</string>
+    <string name="recording_notification_text">Recording in progress...</string>
+    <string name="recording_paused_conflict">Paused — microphone in use by another app</string>
+    <string name="channel_recording_name">Recording Status</string>
+    <string name="channel_recording_desc">Shows persistent notification when audio recording is running</string>
+</resources>

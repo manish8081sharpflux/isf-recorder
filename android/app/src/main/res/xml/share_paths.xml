@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long reports/transcripts are shared as a .txt file from the app cache (messaging apps cut long text). -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>
