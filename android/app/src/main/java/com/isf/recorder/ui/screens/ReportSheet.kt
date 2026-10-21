@@ -225,7 +225,11 @@ fun ReportSheet(
                     val has = (if (editing) text else content).isNotBlank()
                     ActionChipButton("Copy", R.drawable.ic_copy, { copyOrShareText(context, title, shareBody(), share = false) },
                         enabled = has, modifier = Modifier.weight(1f))
-                    ActionChipButton("Share", R.drawable.ic_share, { copyOrShareText(context, title, shareBody(), share = true) },
+                    ActionChipButton("Share", R.drawable.ic_share, {
+                        // Unsaved edits or a call: share the text itself; otherwise a link to the full report
+                        if (isCall || (editing && text != content)) copyOrShareText(context, title, shareBody(), share = true)
+                        else scope.launch { shareReportLink(context, api, recordingId, title, details, tr.lang) { shareBody() } }
+                    },
                         enabled = has, modifier = Modifier.weight(1f))
                 }
             }

@@ -234,7 +234,13 @@ fun ReportScreen(
                     onRegenerate = { showRegenerate = true },
                     onAskAi = { showAiAsk = true },
                     onCopy = { copyOrShareText(context, title, shareBody(), share = false) },
-                    onShare = { copyOrShareText(context, title, shareBody(), share = true) }
+                    onShare = {
+                        // Unsaved edits or a call: share the text itself; otherwise a link to the full report
+                        if (dirty || detail?.get("source")?.toString() == "call") copyOrShareText(context, title, shareBody(), share = true)
+                        else scope.launch {
+                            shareReportLink(context, api, recordingId, title, reportDetailsLines(detail), tr.lang) { shareBody() }
+                        }
+                    }
                 )
                 Spacer(Modifier.height(4.dp))
                 TextButton(onClick = { onViewTranscript(recordingId) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {

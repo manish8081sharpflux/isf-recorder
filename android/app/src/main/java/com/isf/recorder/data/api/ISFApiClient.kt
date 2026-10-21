@@ -1387,6 +1387,11 @@ class ISFApiClient(context: Context) {
         sendForMap("POST", apiUrl("/recordings/$recordingId/report/translate"), mapOf("lang" to lang), longTimeout = true)
             .mapCatching { it["content"]?.toString() ?: throw IllegalStateException("No translation returned") }
 
+    /** POST /recordings/{id}/report/share-link → the web link to the full report (made once, never expires). */
+    suspend fun getReportShareLink(recordingId: String, lang: String? = null): Result<String> =
+        sendForMap("POST", apiUrl("/recordings/$recordingId/report/share-link"), mapOf("lang" to lang))
+            .mapCatching { it["url"]?.toString()?.takeIf { u -> u.startsWith("http") } ?: throw IllegalStateException("No link returned") }
+
     // ── Ask Jomi: saved conversations (§6) ─────────────────────────────────────
 
     /** GET /chat/conversations — own conversations, newest first. [mode] = "all_sessions" | "session". */

@@ -162,9 +162,40 @@ suspend fun buildRecordingShareText(api: ISFApiClient, rec: Map<String, Any?>): 
     return "$header\n\n(The report is not ready yet.)"
 }
 
+/**
+ * Share of a class / meeting report (21 Oct): WhatsApp cuts long messages, so Share sends the title, the details
+ * and a LINK to a web page with the full report (in Hindi when [lang] is "hi"). Copy still copies the full text.
+ * No link (no internet, report not ready…) → the full text is shared as before.
+ */
+suspend fun shareReportLink(
+    context: Context, api: ISFApiClient, recordingId: String, title: String, details: List<String>,
+    lang: String?, fullText: suspend () -> String
+) {
+    val hindi = lang == "hi"
+    api.getReportShareLink(recordingId, lang?.takeIf { hindi })
+        .onSuccess { url ->
+            val message = buildString {
+                append("*").append(title).append("*")
+                details.forEach { append("\n").append(it) }
+                append("\n\n📄 ").append(if (hindi) "पूरी रिपोर्ट (खोलने के लिए टैप करें):" else "Full report (tap to open):")
+                append("\n").append(url)
+            }
+            shareText(context, title, message)
+        }
+        .onFailure {
+            Toast.makeText(context, "Could not make a link (${it.message ?: "no internet"}) — sharing the full text", Toast.LENGTH_LONG).show()
+            shareText(context, title, markdownToChatText(fullText()))
+        }
+}
+
 /** Copy or share a recording's report/summary (fetches it first). */
 suspend fun copyOrShareRecording(context: Context, api: ISFApiClient, rec: Map<String, Any?>, share: Boolean) {
     try {
+        val id = rec["id"]?.toString().orEmpty()
+        if (share && id.isNotBlank() && rec["source"]?.toString() != "call") {
+            shareReportLink(context, api, id, cleanTitle(rec), reportDetailsLines(rec), null) { buildRecordingShareText(api, rec) }
+            return
+        }
         val text = buildRecordingShareText(api, rec)
         copyOrShareText(context, cleanTitle(rec), text, share)
     } catch (e: Exception) {
