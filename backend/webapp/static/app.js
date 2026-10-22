@@ -146,6 +146,45 @@
     return out.join("\n");
   }
 
+  /** Position in the Markdown [source] that matches the clicked spot of the formatted report (best effort). */
+  function caretFromClick(ev, source) {
+    let node = null, offset = 0;
+    if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(ev.clientX, ev.clientY);
+      if (r) { node = r.startContainer; offset = r.startOffset; }
+    } else if (document.caretPositionFromPoint) {
+      const r = document.caretPositionFromPoint(ev.clientX, ev.clientY);
+      if (r) { node = r.offsetNode; offset = r.offset; }
+    }
+    if (!node || node.nodeType !== 3) return null;
+    const text = node.textContent || "";
+    const norm = (t) => t.replace(/\s+/g, " ");
+    const src = norm(source);
+    for (const len of [40, 24, 12, 6]) {                       // the text just before the click, shorter if needed
+      const before = norm(text.slice(Math.max(0, offset - len), offset));
+      if (before.trim().length < 3) continue;
+      const i = src.indexOf(before);
+      if (i >= 0 && src.indexOf(before, i + 1) < 0) return mapNorm(source, i + before.length);
+    }
+    for (const len of [40, 24, 12]) {                          // ... or just after it
+      const after = norm(text.slice(offset, offset + len));
+      if (after.trim().length < 3) continue;
+      const i = src.indexOf(after);
+      if (i >= 0 && src.indexOf(after, i + 1) < 0) return mapNorm(source, i);
+    }
+    return null;
+  }
+  /** Index in [source] for an index in its whitespace-collapsed form. */
+  function mapNorm(source, normIndex) {
+    let n = 0;
+    for (let i = 0; i < source.length; i++) {
+      if (n >= normIndex) return i;
+      if (/\s/.test(source[i])) { while (i + 1 < source.length && /\s/.test(source[i + 1])) i++; }
+      n++;
+    }
+    return source.length;
+  }
+
   async function copyText(text, ok) {
     try { await navigator.clipboard.writeText(text); toast(ok || "Copied"); }
     catch (e) {
@@ -320,6 +359,8 @@
     document.getElementById("back").onclick = () => { if (history.length > 1) history.back(); else location.hash = "#/"; };
     if (rec.has_audio) setupAudio(id);
     const show = (k) => {
+      if (state.unsaved && state.unsaved() && !confirm("Discard your changes to the report?")) return;
+      state.unsaved = null;
       document.querySelectorAll("[data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === k));
       if (k === "report") showReport(id, rec, details);
       else if (k === "transcript") showTranscript(rec);
@@ -362,7 +403,11 @@
         "</div>" +
         (rep.status === "generating" ? '<p class="muted"><span class="spinner"></span>The report is being written…</p>' :
           rep.status === "error" ? '<p class="err">' + esc(rep.error_message || "The report could not be written.") + "</p>" : "") +
-        '<div class="md" id="md">' + (content ? markdown(content) : '<p class="muted">The report is empty.</p>') + "</div>" +
+        (rep.can_edit && rep.status !== "generating"
+          ? '<div class="small muted edit-hint">' + (lang === "en" ? "✏️ Click on the report text to edit" : "Translated by AI — choose English to edit") + "</div>" : "") +
+        '<div class="md' + (rep.can_edit && lang === "en" && rep.status !== "generating" ? " editable" : "") + '" id="md"' +
+        (rep.can_edit && lang === "en" ? ' title="Click to edit"' : "") + ">" +
+        (content ? markdown(content) : '<p class="muted">The report is empty.' + (rep.can_edit ? " Click here to write it." : "") + "</p>") + "</div>" +
         '<div class="actions">' +
         (rep.can_edit && lang === "en" ? '<button class="btn" id="edit">✏️ Edit</button>' : "") +
         (rep.status === "draft" && rep.content ? '<button class="btn" id="finalize">✅ Finalize</button>' : "") +
@@ -379,7 +424,13 @@
         lang = b.dataset.lang; draw();
       });
       const on = (bid, fn) => { const el = document.getElementById(bid); if (el) el.onclick = fn; };
-      on("edit", () => editReport());
+      on("edit", () => editReport(null, null));
+      const $md = document.getElementById("md");
+      if (rep.can_edit && rep.status !== "generating") $md.onclick = (ev) => {
+        if (window.getSelection && String(window.getSelection()).length > 0) return;   // selecting text to copy, not editing
+        if (lang !== "en") { toast("Switch to English to edit"); return; }
+        editReport(caretFromClick(ev, rep.content || ""), $md.getBoundingClientRect().top);
+      };
       on("finalize", async () => { try { rep = await api("POST", "/recordings/" + id + "/report/finalize"); toast("Report finalized"); draw(); } catch (e) { toast(e.message); } });
       on("reopen", async () => { try { rep = await api("POST", "/recordings/" + id + "/report/reopen"); toast("Reopened as draft"); draw(); } catch (e) { toast(e.message); } });
       on("copy", () => copyText([rec.title].concat(details).join("\n") + "\n\n" + content, "Report copied"));
@@ -392,16 +443,35 @@
         } catch (e) { toast(e.message); }
       });
     };
-    const editReport = () => {
-      $t.innerHTML = '<textarea class="editor" id="ed"></textarea><div class="actions"><button class="btn primary" id="save">Save</button>' +
-        '<button class="btn plain" id="cancel">Cancel</button></div>';
-      const ed = document.getElementById("ed"); ed.value = rep.content || ""; ed.focus();
-      document.getElementById("cancel").onclick = draw;
+    const editReport = (caret, topBefore) => {
+      const scrollBefore = window.scrollY;
+      $t.innerHTML = '<div class="small muted edit-hint">Editing — formatting: **bold**, * bullet, # heading</div>' +
+        '<textarea class="editor" id="ed" spellcheck="true"></textarea>' +
+        '<div class="actions sticky-bar"><button class="btn primary" id="save">💾 Save</button>' +
+        '<button class="btn plain" id="cancel">Cancel</button><span class="small muted" id="ed-state"></span></div>';
+      const ed = document.getElementById("ed");
+      const original = rep.content || "";
+      ed.value = original;
+      const grow = () => { ed.style.height = "auto"; ed.style.height = (ed.scrollHeight + 4) + "px"; };
+      grow();
+      // keep the report where it was on the screen (no jump to the top)
+      if (topBefore != null) window.scrollTo(0, scrollBefore + (ed.getBoundingClientRect().top - topBefore));
+      ed.focus({ preventScroll: true });
+      const pos = caret == null ? 0 : Math.max(0, Math.min(caret, original.length));
+      ed.setSelectionRange(pos, pos);
+      const dirty = () => ed.value !== original;
+      state.unsaved = () => dirty();
+      ed.oninput = () => { grow(); document.getElementById("ed-state").textContent = dirty() ? "Unsaved changes" : ""; };
+      const close = () => { state.unsaved = null; draw(); };
+      document.getElementById("cancel").onclick = () => { if (!dirty() || confirm("Discard your changes?")) close(); };
       document.getElementById("save").onclick = async (e) => {
         e.target.disabled = true;
-        try { rep = await api("PUT", "/recordings/" + id + "/report", { content: ed.value }); hindi = null; lang = "en"; toast("Saved"); draw(); }
-        catch (x) { toast(x.message); e.target.disabled = false; }
+        try {
+          rep = await api("PUT", "/recordings/" + id + "/report", { content: ed.value });
+          hindi = null; lang = "en"; state.unsaved = null; toast("Saved"); draw();
+        } catch (x) { toast(x.message); e.target.disabled = false; }
       };
+      ed.onkeydown = (ev) => { if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") { ev.preventDefault(); document.getElementById("save").click(); } };
     };
     draw();
     if (rep.status === "generating") setTimeout(() => { if (document.getElementById("md")) showReport(id, rec, details); }, 5000);
@@ -779,7 +849,17 @@
     else { if (h !== "#/") history.replaceState(null, "", "#/"); renderList(); return; }
     window.scrollTo(0, 0);
   }
-  window.addEventListener("hashchange", render);
+  let lastHash = location.hash;
+  window.addEventListener("hashchange", () => {
+    if (state.unsaved && state.unsaved() && !confirm("Discard your changes to the report?")) {
+      history.pushState(null, "", lastHash || "#/");          // stay on the report
+      return;
+    }
+    state.unsaved = null;
+    lastHash = location.hash;
+    render();
+  });
+  window.addEventListener("beforeunload", (e) => { if (state.unsaved && state.unsaved()) { e.preventDefault(); e.returnValue = ""; } });
   // keep name / role fresh (e.g. made admin since the last login), then draw
   if (store.token) {
     api("GET", "/auth/me").then((me) => { if (me && me.role) { store.user = Object.assign({}, store.user, me); } }).catch(() => {}).finally(render);

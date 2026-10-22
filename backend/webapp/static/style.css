@@ -128,3 +128,10 @@ table.grid th, table.grid td { text-align: left; padding: 8px 6px; border-bottom
 table.grid select { padding: 4px 8px; }
 .nowrap { white-space: nowrap; }
 @media (max-width: 700px) { table.grid { display: block; overflow-x: auto; } .chat-in { flex-wrap: wrap; } }
+
+/* click-to-edit report (22 Oct) */
+.md.editable { cursor: text; border-radius: 10px; padding: 4px 6px; margin: 0 -6px; transition: background .15s, box-shadow .15s; }
+.md.editable:hover { background: #f7fbf9; box-shadow: 0 0 0 1px var(--mint-line); }
+.edit-hint { margin: 6px 0 2px; }
+textarea.editor { overflow: hidden; resize: none; min-height: 300px; }
+.sticky-bar { position: sticky; bottom: 0; background: #fff; padding: 10px 0; margin-bottom: 0; border-top: 1px solid var(--line); z-index: 2; align-items: center; }
