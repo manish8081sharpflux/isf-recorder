@@ -95,11 +95,11 @@ fun ReportSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.background) {
         val editMode = editing && report != null && status != "generating"
+        val navBottom = navBarBottom()   // Save / Cancel / Copy / Share always above the phone's ◁ ○ ☰ buttons (22 Oct)
         Column(
             Modifier.fillMaxWidth()
                 .then(if (editMode) Modifier.fillMaxHeight().imePadding() else Modifier)
-                .navigationBarsPadding()   // Copy / Share stay above the phone's ◁ ○ ☰ buttons
-                .padding(horizontal = 16.dp).padding(bottom = if (editMode) 12.dp else 24.dp)
+                .padding(horizontal = 16.dp).padding(bottom = navBottom + if (editMode) 12.dp else 24.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -132,8 +132,12 @@ fun ReportSheet(
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { audio.pause(); save(text, "Report saved") },
-                        enabled = busy == null && text != content,
+                        onClick = {
+                            audio.pause()
+                            if (text == content) { editing = false; Toast.makeText(context, "Nothing changed", Toast.LENGTH_SHORT).show() }
+                            else save(text, "Report saved")
+                        },
+                        enabled = busy == null,
                         colors = ButtonDefaults.buttonColors(containerColor = JomiGreen),
                         modifier = Modifier.weight(1f)
                     ) { Text(if (busy == "save") "Saving…" else "Save") }
@@ -214,8 +218,11 @@ fun ReportSheet(
                 if (editing) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { save(text, "Report saved") },
-                            enabled = busy == null && text != content,
+                            onClick = {
+                                if (text == content) { editing = false; Toast.makeText(context, "Nothing changed", Toast.LENGTH_SHORT).show() }
+                                else save(text, "Report saved")
+                            },
+                            enabled = busy == null,
                             colors = ButtonDefaults.buttonColors(containerColor = JomiGreen),
                             modifier = Modifier.weight(1f)
                         ) { Text(if (busy == "save") "Saving…" else "Save") }

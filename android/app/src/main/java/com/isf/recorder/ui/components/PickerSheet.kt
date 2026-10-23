@@ -114,7 +114,7 @@ fun PickerSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color.White) {
         // imePadding: the sheet moves above the keyboard while searching (the list shrinks instead of hiding
         // behind it); navigationBarsPadding: Done stays above the phone's ◁ ○ ☰ buttons (21 Oct)
-        Column(Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxWidth().imePadding().padding(bottom = navBarBottom()).padding(horizontal = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
                 IconButton(onClick = onDismiss) { Icon(painterResource(R.drawable.ic_close), "Close", tint = JomiTextMuted) }

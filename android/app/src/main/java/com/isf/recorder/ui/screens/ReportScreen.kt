@@ -392,7 +392,8 @@ private fun ReportActions(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (editing) {
-                Button(onClick = onSave, enabled = dirty && busy == null, colors = ButtonDefaults.buttonColors(containerColor = JomiGreen)) {
+                // always tappable (a grey Save looked broken); nothing changed -> just leave edit mode
+                Button(onClick = { if (dirty) onSave() else onCancelEdit() }, enabled = busy == null, colors = ButtonDefaults.buttonColors(containerColor = JomiGreen)) {
                     Text(if (busy == "save") "Saving…" else "Save")
                 }
                 OutlinedButton(onClick = onCancelEdit, enabled = busy == null) { Text("Cancel") }
